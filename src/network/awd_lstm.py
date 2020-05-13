@@ -6,65 +6,10 @@ from torch import Tensor
 
 # A simplified version of AWD-LSTM implment from scratch, code adapted from https://github.com/a-martyn/awd-lstm 
 # TODO if this works, modify notebook version
-class LSTMCell(nn.Module):
-    """
-    A single LSTM unit. May be stacked.
-    """
-
-    def __init__(self, input_size, output_size, bias=True):
-        """
-        Initialize cell.
-
-        Parameters:
-            input_size: input size
-            output_size: output size
-            bias: if True, use bias
-        """
-
-        super(LSTMCell, self).__init__()
-        
-        # Contains all weights for the 4 linear mappings of the input x
-        # e.g. Wi, Wf, Wo, Wc
-        self.i2h = nn.Linear(input_size, 4 * output_size, bias=bias)
-        # Contains all weights for the 4 linear mappings of the hidden state h
-        # e.g. Ui, Uf, Uo, Uc
-        self.h2h = nn.Linear(output_size, 4 * output_size, bias=bias)
-        self.output_size = output_size
-
-    def forward(self, x, hidden):
-        """
-        Forward pass.
-
-        Parameters:
-            x: input vector of size (batch_size, 1, input_size)
-            h: hidden state vector from previous activation (previous hidden state vector and cell state vector).
-               Dimension: ((1, 1, input_size), (1, 1, input_size))
-
-        Returns: hidden state vector and cell state vector as a tuple
-        """
-
-        # unpack tuple (recurrent activations, recurrent cell state)
-        h, c = hidden
-
-        # Linear mappings: all four in one vectorised computation
-        preact = self.i2h(x) + self.h2h(h)
-
-        # Activations
-        i = torch.sigmoid(preact[:, :self.output_size])                         # input gate
-        f = torch.sigmoid(preact[:, self.output_size:2 * self.output_size])     # forget gate
-        g = torch.tanh(preact[:, 3 * self.output_size:])                        # cell gate
-        o = torch.sigmoid(preact[:, 2 * self.output_size:3 * self.output_size]) # ouput gate
-
-        # Cell state computations: 
-
-        c_t = torch.mul(f, c) + torch.mul(i, g)
-        h_t = torch.mul(o, torch.tanh(c_t))
-
-        return h_t, c_t
 
 class WeightDropout(nn.Module):
     
-    def __init__(self, module: LSTMCell, weight_p: float):
+    def __init__(self, module: nn.LSTM, weight_p: float):
         super().__init__()
         self.module, self.weight_p = module, weight_p
             
@@ -130,7 +75,7 @@ class AWD_LSTM(nn.Module):
             else:
                 cell_output_s = hidden_size
 
-            layer = LSTMCell(cell_input_s, cell_output_s, bias=bias)
+            layer = nn.LSTM(cell_input_s, cell_output_s, bias=bias)
             layer = WeightDropout(layer, dropout_wts) # Weight dropping
             self.layers.append(layer)
 
