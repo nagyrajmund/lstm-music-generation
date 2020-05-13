@@ -3,6 +3,7 @@
 import sys
 sys.path.append('../')
 
+import torch
 from torch import optim, nn, utils, autograd
 from torch.utils.data import DataLoader
 from pathlib import Path
@@ -23,9 +24,9 @@ def train_network(config):
     # TODO implement
     # train_loader = DataLoader
     # val_loader = DataLoader
-
+    
     model = AWD_LSTM(\
-        ntokens = config['ntokens'], input_size=config['batch_size'], embedding_size=config['embedding_size'], \
+        input_size=config['input_size'], embedding_size=config['embedding_size'], \
             hidden_size=config['hidden_size'], nlayers=config['nlayers'])
     loss_f = nn.CrossEntropyLoss()
     # optimizer = optim.Adam(self.parameters(), lr=config['lr'])
@@ -65,9 +66,9 @@ if __name__ == "__main__":
     # this should be read from a file or cmd line
     dataset_dir = ''
     config = {
-        'ntokens': 4,
         'n_epochs': 20,
         'batch_size': 10,
+        'input_size': 10, # TODO change default
         'embedding_size': 400,
         'hidden_size': 600,
         'nlayers': 4,

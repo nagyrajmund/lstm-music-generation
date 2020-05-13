@@ -9,7 +9,7 @@ from pytorch_lightning import Trainer
 class AWD_LSTM(LightningModule):
     """
     AWD_LSTM that uses the following optimization strategies: temporal activation regularization, weight dropping,
-    variable length backpropagation sequences. Additional methods may be employed from the outside, e.g. ASGD.
+    variable length backpropagation sequences and ASGD (optional).
     """
     # TODO other dropout methods? e.g. variational dropout
     # TODO implement windowed bptt
@@ -18,7 +18,6 @@ class AWD_LSTM(LightningModule):
         """
         Initialize network.
         Parameters contained in hparams:
-            ntokens:  number of tokens
             input_size:  input size
             embedding_size:  embedding size
             hidden_size:  hidden size; size of input and output in intermediate layers
@@ -26,6 +25,7 @@ class AWD_LSTM(LightningModule):
             bias:  if True, use bias
             device:  device
             dropout_wts:  dropout rate
+            asgd:  if True, use ASGD
 
         Parameters:
             hparams:  command-line arguments, see add_model_specific_args() for details
@@ -33,11 +33,12 @@ class AWD_LSTM(LightningModule):
         
         super(AWD_LSTM, self).__init__()
         
-        self.ntokens = hparams.ntokens
+        self.input_size = hparams.input_size
         self.nlayers = hparams.nlayers
         self.hidden_size = hparams.hidden_size
         self.device = hparams.device
         self.embedding_size = hparams.embedding_size
+        self.asgd = hparams.asgd
 
         # Embedding
         self.embedding = nn.Embedding(self.input_size, self.embedding_size)
@@ -55,12 +56,12 @@ class AWD_LSTM(LightningModule):
             else:
                 cell_output_s = self.hidden_size
 
-            layer = nn.LSTM(cell_input_s, cell_output_s, bias=hparams.bias)
+            layer = nn.LSTMCell(cell_input_s, cell_output_s, bias=hparams.bias)
             layer = WeightDropout(layer, hparams.dropout_wts) # Weight dropping
             self.layers.append(layer)
 
         # Decoder
-        self.decoder = nn.Linear(embedding_size, self.ntokens)
+        self.decoder = nn.Linear(self.embedding_size, self.input_size)
         
         self.output = None
 
@@ -69,7 +70,7 @@ class AWD_LSTM(LightningModule):
         Forward pass.
 
         Parameters:
-            x: input vector of size (batch_size, 1, input_size)
+            x: input (batched)
             h: hidden state vector from previous activation (previous hidden state vector and cell state vector).
                Dimension: ((1, 1, input_size), (1, 1, input_size))
 
@@ -78,6 +79,7 @@ class AWD_LSTM(LightningModule):
         
         h, c = hiddens
         output = Tensor().to(self.device)
+        x = self.embedding(x)  # (batch_size, 1, input_size)
         
         # Propagate through layers for each timestep
         for t in range(x.size(0)):    
@@ -103,28 +105,30 @@ class AWD_LSTM(LightningModule):
         
         # Translate embedding vectors to tokens
         reshaped = output.view(output.size(0) * output.size(1), output.size(2)) # (batch_size, embedding_size)
-        decoded = self.decoder(reshaped) # (batch_size, ntokens)
-        decoded = decoded.view(output.size(0), output.size(1), decoded.size(1)) # (batch_size, ntokens, ntokens)
+        decoded = self.decoder(reshaped) # (batch_size, input_size)
+        decoded = decoded.view(output.size(0), output.size(1), decoded.size(1)) # (batch_size, input_size, input_size)
 
         return decoded, (h, c)
         
     def configure_optimizers(self):
-        return optim.ASGD(self.parameters(), lr=0.01, lambd=0.0001, alpha=0.75, t0=1000000.0, weight_decay=0)
+        if self.asgd:
+            return optim.ASGD(self.parameters(), lr=self.hparams.lr, lambd=0.0001, alpha=0.75, t0=1000000.0, weight_decay=0)
+        return optim.Adam(self.parameters(), lr=self.hparams.lr)
 
     def prepare_data(self):
-        # prepare Dataset
+        # TODO prepare Dataset
         pass 
 
     def train_dataloader(self):
-        # return DataLoader
+        # TODO return DataLoader
         pass
 
     def val_dataloader(self):
-        # return DataLoader
+        # TODO return DataLoader
         pass
 
     def test_dataloader(self):
-        # return DataLoader
+        # TODO return DataLoader
         pass
 
     def general_step(self, batch, batch_idx):
@@ -160,11 +164,13 @@ class AWD_LSTM(LightningModule):
     def add_model_specific_args(parent_parser):
         parser = ArgumentParser(parents=[parent_parser], add_help=False)
         parser.add_argument('--n_epochs', type=int, default=20)
-        parser.add_argument('--batch_size', type=int, default=10)
+        parser.add_argument('--batch_size', type=int, default=10) # TODO move elsewhere?
+        parser.add_argument('--input_size', type=int, default=10) # TODO change default
         parser.add_argument('--embedding_size', type=int, default=400)
         parser.add_argument('--hidden_size', type=int, default=600)
         parser.add_argument('--nlayers', type=int, default=4)
         parser.add_argument('--lr', type=int, default=0.0001)
+        parser.add_argument('--asgd', type=bool, default=True)
         return parser
 
 def build_argument_parser():
