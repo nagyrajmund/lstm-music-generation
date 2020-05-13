@@ -4,6 +4,7 @@ import torchvision
 import numpy as np
 from sklearn.preprocessing import OneHotEncoder
 from torch.utils.data import Dataset, DataLoader
+import pandas as pd
 
 
 def prepare_datasets(sampling_method, style, note_range, freq, composers):
@@ -12,8 +13,8 @@ def prepare_datasets(sampling_method, style, note_range, freq, composers):
     f = freq.split('_')[-1].replace("req", "")
     
     csv_name = '_'.join([sampling_method, style, r, f]) + '.csv'
-    root = "..\..\dataset"
-    path = "..\..\dataset\%s\%s\%s\%s\\" %(sampling_method, style, note_range, freq)
+    root = "..\\..\\dataset"
+    path = "..\\..\\dataset\%s\%s\%s\%s\\" %(sampling_method, style, note_range, freq)
     
     for composer in composers:
         sub_path = path + '\\' + composer + '\\'
@@ -34,7 +35,7 @@ class ClaraDataset(Dataset):
         self.note_range = note_range
         self.freq = freq
         
-        file = "..\..\dataset" + sampling + '_' + style + '_r' + str(note_range) + '_f' + str(freq) + '.csv'
+        file = "..\\..\\dataset\\" + sampling + '_' + style + '_r' + str(note_range) + '_f' + str(freq) + '.csv'
         enc = OneHotEncoder(handle_unknown='ignore')
         self.x = torch.tensor(enc.fit_transform(pd.read_csv(file, header=None).values).todense())
         self.y = torch.tensor(enc.fit_transform(pd.read_csv(file, header=None).values).todense())
