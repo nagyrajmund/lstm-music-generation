@@ -25,7 +25,7 @@ class LSTMCell(nn.Module):
         
         # Contains all weights for the 4 linear mappings of the input x
         # e.g. Wi, Wf, Wo, Wc
-        self.i2h = nn.Linear(input_size, 4*output_size, bias=bias)
+        self.i2h = nn.Linear(input_size, 4 * output_size, bias=bias)
         # Contains all weights for the 4 linear mappings of the hidden state h
         # e.g. Ui, Uf, Uo, Uc
         self.h2h = nn.Linear(output_size, 4 * output_size, bias=bias)
@@ -36,23 +36,24 @@ class LSTMCell(nn.Module):
         Forward pass.
 
         Parameters:
-            x: input vector
-            h: hidden state vector from previous activation
+            x: input vector of size (batch_size, 1, input_size)
+            h: hidden state vector from previous activation (previous hidden state vector and cell state vector).
+               Dimension: ((1, 1, input_size), (1, 1, input_size))
 
-        Returns: hidden state vector and cell state vector
+        Returns: hidden state vector and cell state vector as a tuple
         """
 
         # unpack tuple (recurrent activations, recurrent cell state)
         h, c = hidden
 
-        # Linear mappings : all four in one vectorised computation
+        # Linear mappings: all four in one vectorised computation
         preact = self.i2h(x) + self.h2h(h)
 
         # Activations
-        i = torch.sigmoid(preact[:, :self.output_size])                      # input gate
-        f = torch.sigmoid(preact[:, self.output_size:2*self.output_size])    # forget gate
-        g = torch.tanh(preact[:, 3*self.output_size:])                       # cell gate
-        o = torch.sigmoid(preact[:, 2*self.output_size:3*self.output_size])  # ouput gate
+        i = torch.sigmoid(preact[:, :self.output_size])                         # input gate
+        f = torch.sigmoid(preact[:, self.output_size:2 * self.output_size])     # forget gate
+        g = torch.tanh(preact[:, 3 * self.output_size:])                        # cell gate
+        o = torch.sigmoid(preact[:, 2 * self.output_size:3 * self.output_size]) # ouput gate
 
         # Cell state computations: 
 
@@ -91,6 +92,19 @@ class AWD_LSTM(nn.Module):
 
     def __init__(self, ntokens: int, input_size: int, embedding_size: int, hidden_size: int, nlayers: int=3, 
                  bias: bool=True, device: str='cpu', dropout_wts: float=0.5):
+        """
+        Initialize network.
+
+        Parameters:
+            ntokens:  number of tokens
+            input_size:  input size
+            embedding_size:  embedding size
+            hidden_size:  hidden size; size of input and output in intermediate layers
+            nlayers:  number of layers
+            bias:  if True, use bias
+            device:  device
+            dropout_wts:  dropout rate
+        """
         
         super(AWD_LSTM, self).__init__()
         
@@ -125,38 +139,17 @@ class AWD_LSTM(nn.Module):
         
         self.output = None
 
-    def embedding_dropout(self, embed, words, p=0.1):
-        """
-        Taken from original authors code.
-        TODO: re-write and add test
-        """
-        if not self.training:
-            masked_embed_weight = embed.weight
-        elif not p:
-            masked_embed_weight = embed.weight
-        else:
-            mask = embed.weight.data.new().resize_((embed.weight.size(0), 1)).bernoulli_(1 - p).expand_as(embed.weight) / (1 - p)
-            masked_embed_weight = mask * embed.weight
-    
-        padding_idx = embed.padding_idx
-        if padding_idx is None:
-            padding_idx = -1
-    
-        X = F.embedding(words, masked_embed_weight,
-                        padding_idx, embed.max_norm, embed.norm_type,
-                        embed.scale_grad_by_freq, embed.sparse)
-        return X
-
     def forward(self, x, hiddens):
         """
         Forward pass.
 
         Parameters:
-            x: input
-            hiddens: tuple; input from previous activation
-        """
+            x: input vector of size (batch_size, 1, input_size)
+            h: hidden state vector from previous activation (previous hidden state vector and cell state vector).
+               Dimension: ((1, 1, input_size), (1, 1, input_size))
 
-        x = self.embedding_dropout(self.embedding, x, p=self.dropout_emb)
+        Returns: hidden state vector and cell state vector as a tuple
+        """
         
         h, c = hiddens
         output = Tensor().to(self.device)
@@ -164,7 +157,7 @@ class AWD_LSTM(nn.Module):
         # Propagate through layers for each timestep
         for t in range(x.size(0)):    
             
-            inp = x[t,:,:]
+            inp = x[t, :, :]
             h_prev = inp
             h_new = []
             c_new = []
@@ -175,19 +168,18 @@ class AWD_LSTM(nn.Module):
                 h_new.append(h_curr)
                 c_new.append(c_curr)
 
-            h = h_new
-            c = c_new
+            h = h_new # (1, 1, current_output_size)
+            c = c_new # (1, 1, current_output_size)
             
             # TAR - temporal activation regularization
             output = th.cat((output, h[-1].unsqueeze(0)))
             
-        self.output = output.detach()
+        self.output = output.detach() # Dimension is (batch_size, 1, embedding_size)
         
         # Translate embedding vectors to tokens
-        # TODO rewrite this because the dimensions are bad
-        reshaped = output.view(output.size(0) * output.size(1), output.size(2))
-        decoded = self.decoder(reshaped)
-        decoded = decoded.view(output.size(0), output.size(1), decoded.size(1))
+        reshaped = output.view(output.size(0) * output.size(1), output.size(2)) # (batch_size, embedding_size)
+        decoded = self.decoder(reshaped) # (batch_size, ntokens)
+        decoded = decoded.view(output.size(0), output.size(1), decoded.size(1)) # (batch_size, ntokens, ntokens)
 
         return decoded, (h, c)
 

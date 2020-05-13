@@ -42,7 +42,7 @@ class ClaraDataset(Dataset):
 
         
     def __getitem__(self, idx):
-        return self.x[inx], self.y[idx]
+        return self.x[idx], self.y[idx]
         
     def __len__(self):
         return self.x.shape[0]
