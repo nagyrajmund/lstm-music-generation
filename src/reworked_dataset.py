@@ -21,6 +21,7 @@ class ClaraDataset(Dataset):
         self.n_tokens = len(self.note_to_ind)
         directory = os.fsencode(dataset_path)
         self.fnames = [os.path.join(directory,fname) for fname in os.listdir(directory) if os.fsdecode(fname).endswith('.txt')]
+    
     def __len__(self):
         return len(self.fnames)
     
@@ -46,7 +47,6 @@ class ClaraDataset(Dataset):
         x = [sequence[:-1] for sequence in sequences] # Exclude last input to ensure that x and y are the same size
         y = [sequence[1:] for sequence in sequences] 
         #TODO: do this in only one comprehension :)
-
         return x, y
 
     #TODO: should we store the dataset in memory? then we only have to tokenise once
@@ -62,7 +62,12 @@ class ClaraDataset(Dataset):
             note_to_ind:  dictionary for converting tokens to numbers
             ind_to_note:  list for converting numbers to tokens
         """
-        note_to_ind = {}
+        note_to_ind = {
+            '<PAD>'   : 0, # 0 will be used as padding
+            '<START>' : 1,
+            '<EOS>'   : 2
+        }
+        #TODO: append and prepend start and eos to the songs
 
         directory = os.fsencode(dataset_path)
         #TODO: add beginning/end of song tokens
@@ -80,6 +85,6 @@ class ClaraDataset(Dataset):
 
     def tokenise_as_numbers(self, fname):
         with open(fname, 'r') as f:
-            note_list = f.readline().split()
+            note_list = f.readline().split() #TODO add support for multi-line txts!
     
             return [self.note_to_ind[note] for note in note_list]
