@@ -99,10 +99,16 @@ class AWD_LSTM(LightningModule):
 
         Returns: hidden state vector and cell state vector as a tuple
         """
+        print("input shape before embedding: ", X.size())
+        #TODO: Do we want integrate the size into models? e.g. self.batch_size
+        self.batch_size, seq_len = X.size()
+
         print('[LOG] doing forward!')
         print('[LOG] embedding...')
         X = self.embedding(X) # embedding takes the padded sequence, and not the packed_and_padded sequence because it cannot operate on the latter
         print('[LOG] packing...')
+
+        # Dim transformation: (batch_size, seq_len, 1) -> (batch_size, seq_len, embedding_dim)
         X = rnn.pack_padded_sequence(X, X_lens, batch_first=True, enforce_sorted=False) #TODO enforce sorted
          
         layer_hidden_sizes = [self.P.hidden_size, self.P.hidden_size, self.P.embedding_size]
@@ -114,15 +120,28 @@ class AWD_LSTM(LightningModule):
             layer_input = output
 
 
-        X, _ = rnn.pad_packed_sequence(X, batch_first=True)
+        X, _ = rnn.pad_packed_sequence(output, batch_first=True)
         
         # X.shape is (batch_size, seq_len, embedding_size)
+
+        # need to reshape the data so it goes into the linear layer
         X = X.contiguous()
+        X = X.view(-1, X.shape[2])
+
+        # Linear mapping
         X = self.decoder(X)
-        print("Decoded: ", X.shape)        
+        print("shape after decoding")
+        print(X.shape)
+        self.nb_tags = X.shape[1]
+
+        # 4. Create softmax activations bc we're doing classification
+        # Dim transformation: (batch_size * seq_len, nb_lstm_units) -> (batch_size, seq_len, nb_tags)
+        X = F.log_softmax(X, dim=1)
+
+        X = X.view(self.batch_size, seq_len, self.nb_tags)
         # TODO: detach?
        
-        return output
+        return X
         
     def configure_optimizers(self):
         if self.P.asgd:
@@ -152,14 +171,18 @@ class AWD_LSTM(LightningModule):
         print('New batch!')
         x, y, x_lens, y_lens = batch
         output = self.forward(x, x_lens)
+        print("output shape: ", output.shape)
+        print("y shape: ", y.shape)
+        print("output: ")
         print(output)
+        print("y: ")
         print(y)
         loss = self.loss(output, y) # TODO @Logan: make sure the lsos function can eat Y because it's padded.
         return loss
 
     def loss(self, prediction, labels):
-        """ pred:   (batch_size, seq_len, P.hidden_size)
-            labels: (seq_len, P.hidden_size)
+        """ pred:   (batch_size, seq_len, n_tokens)
+            labels: (batch_size, seq_len)
         """
         
 
@@ -167,7 +190,7 @@ class AWD_LSTM(LightningModule):
         # TODO @Logan: filter out the paddings so that they don't influence the loss 
         # i.e. x: [0, 1, 2, 6, PAD, PAD, PAD], y: [1,2,6,5,PAD,PAD,PAD] -> operate on x[:4] and y[:4] only
         # see this for details https://towardsdatascience.com/taming-lstms-variable-sized-mini-batches-and-why-pytorch-is-good-for-your-health-61d35642972e
-        F.cross_entropy(output.view(-1, ), labels)
+        F.cross_entropy(prediction.view(-1, ), labels)
 
     def training_step(self, batch, batch_idx):
         loss = self.general_step(batch, batch_idx)
@@ -207,7 +230,7 @@ class AWD_LSTM(LightningModule):
 def build_argument_parser():
     parser = ArgumentParser()
     #TODO: chagne back to relative path (temp fix for debugger)
-    parser.add_argument('--dataset_path', type=str, default='../dataset/piano_solo/note_range38/sample_freq4/jazz')
+    parser.add_argument('--dataset_path', type=str, default=r'C:\Users\User\Desktop\clara\datasets\chordwise\chamber\note_range38\sample_freq4\debussy')
     parser = AWD_LSTM.add_model_specific_args(parser) # Add model-specific args
     parser = Trainer.add_argparse_args(parser) # Add ALL training-specific args
     return parser
