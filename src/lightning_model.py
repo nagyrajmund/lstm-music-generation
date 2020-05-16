@@ -185,39 +185,40 @@ class AWD_LSTM(LightningModule):
             
         """
 
-        # #1ST: take argmax of pred along dim n_tokens and map it into tokens
+        #1ST: take argmax of pred along dim n_tokens and map it into tokens
         # prediction = torch.argmax(prediction, dim=2)
         # print("shape after argmax: ", prediction.shape)
         # print("predictions: ", prediction)
 
-        # prediction = prediction.view(-1)
+        prediction = prediction.view(-1, self.nb_tags)
         # print("shape after flatten: ", prediction.shape)
-        # #2ND: map labels to tokens
-        # labels = labels.view(-1)
+        #2ND: map labels to tokens
+        labels = labels.view(-1)
 
 
-        # #3RD: compute ce loss
+        #3RD: compute ce loss
         
-        # #3.1 create a mask by filtering out all tokens that ARE NOT the padding token
-        # tag_pad_token = 0
-        # mask = (labels > tag_pad_token).float()
+        #3.1 create a mask by filtering out all tokens that ARE NOT the padding token
+        tag_pad_token = 0
+        mask = (labels > tag_pad_token).float()
         
-        # #3.2 count how many tokens we have
-        # # nb_tokens = int(torch.sum(mask).data[0]) failed so use np instead
-        # nb_tokens = int(np.sum(mask.numpy()))
+        #3.2 count how many tokens we have
+        # nb_tokens = int(torch.sum(mask).data[0]) failed so use np instead
+        nb_tokens = int(np.sum(mask.numpy()))
 
-        # #3.3 pick the values for the label and zero out the rest with the mask
-        # #TODO very tricky type conversions here, better methods?
-        # prediction = prediction[range(int(list(prediction.size())[0])), labels] * mask
+        #3.3 pick the values for the label and zero out the rest with the mask
+        #TODO very tricky type conversions here, better methods?
+        prediction = prediction[range(int(list(prediction.size())[0])), labels] * mask
 
-        # #4TH compute cross entropy loss which ignores all <PAD> tokens
-        # ce_loss = -torch.sum(prediction) / nb_tokens
+        #4TH compute cross entropy loss which ignores all <PAD> tokens
+        ce_loss = -torch.sum(prediction) / nb_tokens
+        print("corss entropy loss: ", ce_loss)
+        return ce_loss
 
-        # return ce_loss
-        print("calculating cross entropy loss")
-        criterion = nn.CrossEntropyLoss()
-        loss = criterion(prediction, labels)
-        return loss
+        # print("calculating cross entropy loss")
+        # criterion = nn.CrossEntropyLoss()
+        # loss = criterion(prediction, labels)
+        # return loss
 
     def training_step(self, batch, batch_idx):
         loss = self.general_step(batch, batch_idx)
@@ -245,7 +246,7 @@ class AWD_LSTM(LightningModule):
     @staticmethod
     def add_model_specific_args(parent_parser):
         parser = ArgumentParser(parents=[parent_parser], add_help=False)
-        parser.add_argument('--batch_size', type=int, default=4)
+        parser.add_argument('--batch_size', type=int, default=2)
         parser.add_argument('--embedding_size', type=int, default=400)
         parser.add_argument('--hidden_size', type=int, default=600)
         parser.add_argument('--lr', type=int, default=0.0001)
