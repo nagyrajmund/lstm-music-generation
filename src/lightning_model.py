@@ -110,21 +110,16 @@ class AWD_LSTM(LightningModule):
 
         layer_input = X
         for idx, LSTM_layer in enumerate(self.layers):
-            print('[LOG] layer.forward!')
             output, (h, c) = LSTM_layer(layer_input, initial_hiddens[idx])
-            layer_input = h
+            layer_input = output
+
 
         X, _ = rnn.pad_packed_sequence(X, batch_first=True)
+        
         # X.shape is (batch_size, seq_len, embedding_size)
         X = X.contiguous()
-        print('old ', X.shape)
-        # Reshape X to contain (embedding_size) elements #TODO no need!
-        X = X.view(-1, X.shape[2])
-        print('new ', X.shape)
-
         X = self.decoder(X)
-        # X.shape is (batch_size, seq_len, P.hidden_size) again
-        X = X.view(self.P.batch_size, -1, self.P.embedding_size)
+        print("Decoded: ", X.shape)        
         # TODO: detach?
        
         return output
@@ -157,19 +152,22 @@ class AWD_LSTM(LightningModule):
         print('New batch!')
         x, y, x_lens, y_lens = batch
         output = self.forward(x, x_lens)
-        loss = self.loss(output, y, y_lens) # TODO @Logan: make sure the lsos function can eat Y because it's padded.
+        print(output)
+        print(y)
+        loss = self.loss(output, y) # TODO @Logan: make sure the lsos function can eat Y because it's padded.
         return loss
 
-    def loss(self, pred, labels):
+    def loss(self, prediction, labels):
         """ pred:   (batch_size, seq_len, P.hidden_size)
             labels: (seq_len, P.hidden_size)
         """
-        pred = pred.view(-1, self.P.hidden_size)
-        labels = labels.view(-1) # Flatten Y
+        
+
+
         # TODO @Logan: filter out the paddings so that they don't influence the loss 
         # i.e. x: [0, 1, 2, 6, PAD, PAD, PAD], y: [1,2,6,5,PAD,PAD,PAD] -> operate on x[:4] and y[:4] only
         # see this for details https://towardsdatascience.com/taming-lstms-variable-sized-mini-batches-and-why-pytorch-is-good-for-your-health-61d35642972e
-        F.cross_entropy(output.view(-1, ), y)
+        F.cross_entropy(output.view(-1, ), labels)
 
     def training_step(self, batch, batch_idx):
         loss = self.general_step(batch, batch_idx)

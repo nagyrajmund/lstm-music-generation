@@ -65,14 +65,13 @@ class ClaraDataset(Dataset):
         note_to_ind = {
             '<PAD>'   : 0, # 0 will be used as padding
             '<START>' : 1,
-            '<EOS>'   : 2
+            '<END>'   : 2
         }
         #TODO: append and prepend start and eos to the songs
 
         directory = os.fsencode(dataset_path)
         #TODO: add beginning/end of song tokens
         for file in os.listdir(directory):
-
             with open(os.path.join(directory, file), 'r', ) as f:
                 for token in f.readline().split():
                     if token not in note_to_ind:
@@ -87,4 +86,4 @@ class ClaraDataset(Dataset):
         with open(fname, 'r') as f:
             note_list = f.readline().split() #TODO add support for multi-line txts!
     
-            return [self.note_to_ind[note] for note in note_list]
+            return [self.note_to_ind['<START>']] + [self.note_to_ind[note] for note in note_list] + [self.note_to_ind['<END>']]
