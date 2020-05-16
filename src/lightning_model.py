@@ -1,6 +1,7 @@
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
+import numpy as np
 from torch import Tensor
 from torch.utils.data import DataLoader
 from torch.nn.utils import rnn
@@ -99,7 +100,8 @@ class AWD_LSTM(LightningModule):
 
         Returns: hidden state vector and cell state vector as a tuple
         """
-        print("input shape before embedding: ", X.size())
+        # print("input shape before embedding: ", X.size())
+        # print("view batch ", X)
         #TODO: Do we want integrate the size into models? e.g. self.batch_size
         self.batch_size, seq_len = X.size()
 
@@ -130,11 +132,11 @@ class AWD_LSTM(LightningModule):
 
         # Linear mapping
         X = self.decoder(X)
-        print("shape after decoding")
-        print(X.shape)
+        # print("shape after decoding")
+        # print(X.shape)
         self.nb_tags = X.shape[1]
 
-        # 4. Create softmax activations bc we're doing classification
+        # 4. Create loh_softmax activations bc we're doing classification
         # Dim transformation: (batch_size * seq_len, nb_lstm_units) -> (batch_size, seq_len, nb_tags)
         X = F.log_softmax(X, dim=1)
 
@@ -171,26 +173,51 @@ class AWD_LSTM(LightningModule):
         print('New batch!')
         x, y, x_lens, y_lens = batch
         output = self.forward(x, x_lens)
-        print("output shape: ", output.shape)
-        print("y shape: ", y.shape)
-        print("output: ")
-        print(output)
-        print("y: ")
+        print("labels shape: ", y.shape)
+        print("labels: ")
         print(y)
-        loss = self.loss(output, y) # TODO @Logan: make sure the lsos function can eat Y because it's padded.
+        loss = self.loss(output, y) 
         return loss
 
     def loss(self, prediction, labels):
         """ pred:   (batch_size, seq_len, n_tokens)
             labels: (batch_size, seq_len)
+            
         """
+
+        # #1ST: take argmax of pred along dim n_tokens and map it into tokens
+        # prediction = torch.argmax(prediction, dim=2)
+        # print("shape after argmax: ", prediction.shape)
+        # print("predictions: ", prediction)
+
+        # prediction = prediction.view(-1)
+        # print("shape after flatten: ", prediction.shape)
+        # #2ND: map labels to tokens
+        # labels = labels.view(-1)
+
+
+        # #3RD: compute ce loss
         
+        # #3.1 create a mask by filtering out all tokens that ARE NOT the padding token
+        # tag_pad_token = 0
+        # mask = (labels > tag_pad_token).float()
+        
+        # #3.2 count how many tokens we have
+        # # nb_tokens = int(torch.sum(mask).data[0]) failed so use np instead
+        # nb_tokens = int(np.sum(mask.numpy()))
 
+        # #3.3 pick the values for the label and zero out the rest with the mask
+        # #TODO very tricky type conversions here, better methods?
+        # prediction = prediction[range(int(list(prediction.size())[0])), labels] * mask
 
-        # TODO @Logan: filter out the paddings so that they don't influence the loss 
-        # i.e. x: [0, 1, 2, 6, PAD, PAD, PAD], y: [1,2,6,5,PAD,PAD,PAD] -> operate on x[:4] and y[:4] only
-        # see this for details https://towardsdatascience.com/taming-lstms-variable-sized-mini-batches-and-why-pytorch-is-good-for-your-health-61d35642972e
-        F.cross_entropy(prediction.view(-1, ), labels)
+        # #4TH compute cross entropy loss which ignores all <PAD> tokens
+        # ce_loss = -torch.sum(prediction) / nb_tokens
+
+        # return ce_loss
+        print("calculating cross entropy loss")
+        criterion = nn.CrossEntropyLoss()
+        loss = criterion(prediction, labels)
+        return loss
 
     def training_step(self, batch, batch_idx):
         loss = self.general_step(batch, batch_idx)
