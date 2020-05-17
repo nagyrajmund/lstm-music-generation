@@ -1,8 +1,10 @@
 import torch
-from torch import LongTensor
-from torch.utils.data import Dataset, DataLoader
 import pandas as pd
 import os
+from torch import LongTensor
+from torch.utils.data import Dataset, DataLoader
+
+
 class ClaraDataset(Dataset):
     def __init__(self, dataset_path, dicts = None):
         """
@@ -52,6 +54,7 @@ class ClaraDataset(Dataset):
     #TODO: should we store the dataset in memory? then we only have to tokenise once
     #TODO: use better variable names (is token the note (e.g. 'p80') or the number representation)
     #      idea: use note_to_num and not note_to_ind
+    
     @staticmethod
     def build_token_dictionaries(self, dataset_path):
         """

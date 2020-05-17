@@ -11,6 +11,8 @@ from pytorch_lightning import Trainer
 from argparse import ArgumentParser
 from reworked_dataset import ClaraDataset
 from data import utils
+from torch.utils.data.sampler import SubsetRandomSampler
+
 
 class WeightDropout(nn.Module):
     """ Adapted from original salesforce paper. """
@@ -64,9 +66,28 @@ class AWD_LSTM(LightningModule):
         #TODO we have to load the dataset to get the number of tokens
         self.P = hparams
 
-        self.train_dataset = ClaraDataset(P.dataset_path)
+        self.dataset = ClaraDataset(P.dataset_path)
+
+        # building validation dataloader
+        val_split = 0.1
+        random_seed = 1
+        dataset_len = len(self.dataset)
+        indices = list(range(dataset_len))
+        split = int(np.floor(val_split * dataset_len))
+        
+        # shuffle whole dataset
+        np.random.seed(random_seed)
+        np.random.shuffle(indices)
+
+        # shuffled indices 
+        train_indices, val_indices = indices[split:], indices[:split]
+        
+        # Creating data samplers and loaders:
+        self.train_sampler = SubsetRandomSampler(train_indices)
+        self.val_sampler = SubsetRandomSampler(val_indices)
+
         print('[LOG] created dataset!')
-        self.embedding = nn.Embedding(self.train_dataset.n_tokens, P.embedding_size)
+        self.embedding = nn.Embedding(self.dataset.n_tokens, P.embedding_size)
 
         # Layers #TODO: is batch_first = True ok?
         self.layers = nn.ModuleList([
@@ -76,7 +97,7 @@ class AWD_LSTM(LightningModule):
         ])
 
         # Decoder
-        self.decoder = nn.Linear(P.embedding_size, self.train_dataset.n_tokens)
+        self.decoder = nn.Linear(P.embedding_size, self.dataset.n_tokens)
 
     def init_hidden(self, layer_hidden_size):
         # the weights are of the form (nb_layers, batch_size, nb_lstm_units)
@@ -102,7 +123,6 @@ class AWD_LSTM(LightningModule):
         """
         # print("input shape before embedding: ", X.size())
         # print("view batch ", X)
-        #TODO: Do we want integrate the size into models? e.g. self.batch_size
         self.batch_size, seq_len = X.size()
 
         print('[LOG] doing forward!')
@@ -125,18 +145,15 @@ class AWD_LSTM(LightningModule):
         X, _ = rnn.pad_packed_sequence(output, batch_first=True)
         
         # X.shape is (batch_size, seq_len, embedding_size)
-
         # need to reshape the data so it goes into the linear layer
         X = X.contiguous()
         X = X.view(-1, X.shape[2])
 
         # Linear mapping
         X = self.decoder(X)
-        # print("shape after decoding")
-        # print(X.shape)
         self.nb_tags = X.shape[1]
 
-        # 4. Create loh_softmax activations bc we're doing classification
+        # 4. Create log_softmax activations bc we're doing classification
         # Dim transformation: (batch_size * seq_len, nb_lstm_units) -> (batch_size, seq_len, nb_tags)
         X = F.log_softmax(X, dim=1)
 
@@ -155,19 +172,14 @@ class AWD_LSTM(LightningModule):
         pass
         
     def train_dataloader(self):
-        return DataLoader(self.train_dataset, batch_size=self.P.batch_size, collate_fn=utils.pad_sequences)
+        return DataLoader(self.dataset, batch_size=self.P.batch_size, collate_fn=utils.pad_sequences, sampler=self.train_sampler)
 
     #TODO: the validation dataloader is only here so lightning can run fast_dev_run
     def val_dataloader(self):
-        return DataLoader(self.train_dataset, batch_size=self.P.batch_size, collate_fn=utils.pad_sequences)
-        
-    # def val_dataloader(self):
-    #     # TODO return DataLoader
-    #     pass
+        return DataLoader(self.dataset, batch_size=self.P.batch_size, collate_fn=utils.pad_sequences, sampler=self.val_sampler)
 
-    # def test_dataloader(self):
-    #     # TODO return DataLoader
-    #     pass
+        # return DataLoader(self.train_dataset, batch_size=self.P.batch_size, collate_fn=utils.pad_sequences)
+        
 
     def general_step(self, batch, batch_idx):
         print('New batch!')
@@ -185,13 +197,11 @@ class AWD_LSTM(LightningModule):
             
         """
 
-        #1ST: take argmax of pred along dim n_tokens and map it into tokens
-        # prediction = torch.argmax(prediction, dim=2)
-        # print("shape after argmax: ", prediction.shape)
-        # print("predictions: ", prediction)
+        #1ST: expand prediction
 
         prediction = prediction.view(-1, self.nb_tags)
         # print("shape after flatten: ", prediction.shape)
+
         #2ND: map labels to tokens
         labels = labels.view(-1)
 
