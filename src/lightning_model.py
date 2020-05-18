@@ -18,6 +18,7 @@ from torch.utils.data.sampler import SubsetRandomSampler
 class WeightDropout(nn.Module):
     """ Adapted from original salesforce paper. """
     def __init__(self, module: nn.Module, p_dropout: float = 0.5): # Default value of p_dropout is 0.5 in the original paper!
+        print("Using weight dropout!")
         super().__init__()
         self.module = module
         self.p_dropout = p_dropout
