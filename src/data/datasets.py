@@ -40,7 +40,6 @@ class ClaraDataset(Dataset):
         else:
             idxs = [idx]
 
-        # TODO: construct tensor on the proper device!
         # Pack_sequences expects lists of tensors!
         
         sequences = [LongTensor(self.tokenise_as_numbers(self.fnames[i])) for i in idxs]        
