@@ -70,7 +70,7 @@ class AWD_LSTM(LightningModule):
         self.embedding = nn.Embedding(self.dataset.n_tokens, P.embedding_size)
 
         # Layers #TODO: is batch_first = True ok?
-        self. layers = self.construct_LSTM_layers()
+        self.layers = self.construct_LSTM_layers()
 
         # Decoder
         self.decoder = nn.Linear(P.embedding_size, self.dataset.n_tokens)
@@ -106,7 +106,7 @@ class AWD_LSTM(LightningModule):
 
         return (h_init, c_init)
 
-    def forward(self, X, X_lens):
+    def forward(self, X, X_lens): 
         """
         Forward pass.
 
@@ -134,20 +134,20 @@ class AWD_LSTM(LightningModule):
         ##print("[LOG] unpacking the sequence...", end=' ')
         X, _ = rnn.pad_packed_sequence(output, batch_first=True)
         
-        # X.shape is (batch_size, seq_len, embedding_size)
         # need to reshape the data so it goes into the linear layer
         X = X.contiguous()
         X = X.view(-1, X.shape[2])
 
         # Linear mapping
         X = self.decoder(X)
-        self.nb_tags = X.shape[1]
+        # self.nb_tags = X.shape[1]
         
         # 4. Create log_softmax activations bc we're doing classification
         # Dim transformation: (batch_size * seq_len, nb_lstm_units) -> (batch_size, seq_len, nb_tags)
         X = F.log_softmax(X, dim=1)
-
-        X = X.view(self.batch_size, seq_len, self.nb_tags)
+        
+        X = X.view(self.batch_size, seq_len,  self.nb_tags)
+        print(X.shape)
         # TODO: detach?
         return X
         
@@ -168,6 +168,7 @@ class AWD_LSTM(LightningModule):
         return loss
 
     def loss(self, prediction, labels):
+        
         """ pred:   (batch_size, seq_len, n_tokens)
             labels: (batch_size, seq_len)
             
@@ -227,6 +228,65 @@ class AWD_LSTM(LightningModule):
     #     tensorboard_logs = {'test_loss': avg_loss}
     #     return {'avg_test_loss': avg_loss, 'log': tensorboard_logs}
 
+    def generate(self, random_seed, input_len, predic_len):
+        
+        '''
+
+        Parameters: 
+            random_seed : seed to generate random input sequence
+            input_len   : length of input sequence
+            predic_len  : length of predicted sequence
+
+        Flow:
+            feed input tokens [a, b, c, d]
+            pass forward to get output tokens [b, c, d, e]
+            prediction append(e)
+
+            feed input tokens[b, c, d, e] 
+            pass forward to get output tokens[c, d, e, f]
+            prediction append(f)
+
+            ...
+
+            return prediction [e, f, g, h, ..., ] of predic_len
+
+        '''
+        # set random seed
+        torch.manual_seed(random_seed)
+
+        # generate input sequence, randomly sample from dataset.n_tokens
+        input_seq = torch.randint(0, self.dataset.n_tokens - 1, (input_len,))
+        
+        # feed LongTensor to LSTM
+        layer_input = torch.unsqueeze(torch.LongTensor(input_seq), 0)
+
+        # Embeddiing
+        layer_input = self.embedding(layer_input)
+        
+        predicted = []
+        
+
+        for i in range(predic_len):
+            
+            # NOTE: should hidden states be replaced by the trained ones?
+            # if put outsied the loop, output never get updated
+            
+            initial_hiddens = [self.init_hidden(self.P.hidden_size) for _ in range(self.P.n_layers - 1)]
+            initial_hiddens.append(self.init_hidden(self.P.embedding_size))
+            
+            for idx, LSTM_layer in enumerate(self.layers):
+                output, (h, c) = LSTM_layer(layer_input, initial_hiddens[idx])
+                layer_input = output
+            
+            output = self.decoder(output)
+            output = F.log_softmax(output, dim=1)
+            output = torch.argmax(output, dim=2)
+            predicted.append(output[0][-1].item())
+            layer_input = self.embedding(output)
+
+        return predicted
+
+        
     @staticmethod
     def add_model_specific_args(parent_parser):
         parser = ArgumentParser(parents=[parent_parser], add_help=False)
@@ -254,5 +314,8 @@ if __name__ == "__main__":
     hparams = build_argument_parser().parse_args()
     model = AWD_LSTM(hparams)
     trainer = Trainer.from_argparse_args(hparams)
-    trainer.fit(model)
+
+    # trainer.fit(model)
+    # generated_text = model.generate(1,5,7)
+    # print(generated_text)
     # trainer.test()
