@@ -3,8 +3,7 @@ import torch.nn as nn
 import torch.nn.functional as F
 from torch import Tensor 
 
-# A simplified version of AWD-LSTM implment from scratch, code adapted from https://github.com/a-martyn/awd-lstm 
-# TODO if this works, modify notebook version
+# A simplified version of AWD-LSTM implment from scratch, code adapted from https://github.com/a-martyn/awd-lstm
 
 class WeightDropout(nn.Module):
     
@@ -26,13 +25,12 @@ class WeightDropout(nn.Module):
         self._setweights()
         return self.module.forward()
 
+# @deprecated
 class AWD_LSTM(nn.Module):
     """
     AWD_LSTM that uses the following optimization strategies: temporal activation regularization, weight dropping,
     variable length backpropagation sequences. Additional methods may be employed from the outside, e.g. ASGD.
     """
-    # TODO other dropout methods? e.g. variational dropout
-    # TODO implement windowed bptt
 
     def __init__(self, input_size: int, embedding_size: int, hidden_size: int, nlayers: int=3, 
                  bias: bool=True, device: str='cpu', dropout_wts: float=0.5):
