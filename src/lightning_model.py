@@ -10,7 +10,7 @@ from torch import optim
 from pytorch_lightning.core.lightning import LightningModule
 from pytorch_lightning import Trainer
 from argparse import ArgumentParser
-from reworked_dataset import ClaraDataset
+from data.datasets import ClaraDataset
 from data import utils
 from torch.utils.data.sampler import SubsetRandomSampler
 
@@ -27,7 +27,6 @@ class WeightDropout(nn.Module):
         
         self.register_parameter('weight_raw', nn.Parameter(w.data))
         
-
     def _setweights(self):
         "Apply dropout to the raw weights."
         raw_w = self.weight_raw #TODO check if ok
@@ -35,7 +34,6 @@ class WeightDropout(nn.Module):
 
     def forward(self, input, hiddens):
         self._setweights()
-        print('[LOG] weight dropout done')
         return self.module(input, hiddens)
 
 
@@ -66,31 +64,35 @@ class AWD_LSTM(LightningModule):
         super().__init__()
         #TODO we have to load the dataset to get the number of tokens
         self.P = hparams
-
         self.dataset = ClaraDataset(P.dataset_path)
-        print('[LOG] created dataset!')
 
         self.embedding = nn.Embedding(self.dataset.n_tokens, P.embedding_size)
 
         # Layers #TODO: is batch_first = True ok?
-        self.layers = nn.ModuleList([
-            WeightDropout(nn.LSTM(P.embedding_size, P.hidden_size,    bias=P.use_bias, batch_first=True), P.p_dropout),
-            WeightDropout(nn.LSTM(P.hidden_size,    P.hidden_size,    bias=P.use_bias, batch_first=True), P.p_dropout),
-            WeightDropout(nn.LSTM(P.hidden_size,    P.embedding_size, bias=P.use_bias, batch_first=True), P.p_dropout)
-        ])
+        self. layers = self.construct_LSTM_layers()
 
         # Decoder
         self.decoder = nn.Linear(P.embedding_size, self.dataset.n_tokens)
 
+    def construct_LSTM_layers(self):
+        LSTM_layers = []
+        for i in range(self.P.n_layers):
+            input_size = self.P.embedding_size if i == 0 else self.P.hidden_size
+            output_size = self.P.hidden_size if i < (self.P.n_layers - 1) else self.P.embedding_size
+            layer = nn.LSTM(input_size, output_size, bias=self.P.use_bias, batch_first = True)
+            if self.P.weight_dropout:
+                layer = WeightDropout(layer, self.P.p_dropout)
+            
+            LSTM_layers.append(layer)
+
+        return nn.ModuleList(LSTM_layers)
+
     def prepare_data(self):
+         # TODO: This is a hacked version for debug runs.
+         # We will ipmlement the dataset splitting later.        
         
-        #TODO random shuffle dataset
-        train_size = int(len(self.dataset)*0.8)
-        val_size = int(len(self.dataset)*0.1)
-        test_size = len(self.dataset) - train_size - val_size
-        
-        self.train_dataset, self.val_dataset, self.test_dataset = random_split(self.dataset, [train_size, val_size, test_size])
-        print('[LOG] splited dataset!')
+        self.train_dataset = self.dataset #, self.val_dataset, self.test_dataset = random_split(self.dataset, [train_size, val_size, test_size])
+
 
     def init_hidden(self, layer_hidden_size):
         # the weights are of the form (nb_layers, batch_size, nb_lstm_units)
@@ -114,27 +116,21 @@ class AWD_LSTM(LightningModule):
 
         Returns: hidden state vector and cell state vector as a tuple
         """
-        # print("input shape before embedding: ", X.size())
-        # print("view batch ", X)
         self.batch_size, seq_len = X.size()
-
-        print('[LOG] doing forward!')
-        print('[LOG] embedding...')
         X = self.embedding(X) # embedding takes the padded sequence, and not the packed_and_padded sequence because it cannot operate on the latter
-        print('[LOG] packing...')
 
         # Dim transformation: (batch_size, seq_len, 1) -> (batch_size, seq_len, embedding_dim)
         X = rnn.pack_padded_sequence(X, X_lens, batch_first=True, enforce_sorted=False) #TODO enforce sorted
          
-        layer_hidden_sizes = [self.P.hidden_size, self.P.hidden_size, self.P.embedding_size]
-        initial_hiddens = [self.init_hidden(hidden_size) for hidden_size in layer_hidden_sizes]
+        initial_hiddens = [self.init_hidden(self.P.hidden_size) for _ in range(self.P.n_layers - 1)]
+        initial_hiddens.append(self.init_hidden(self.P.embedding_size)) # The last layer's hidden size is the embedding size
 
         layer_input = X
         for idx, LSTM_layer in enumerate(self.layers):
             output, (h, c) = LSTM_layer(layer_input, initial_hiddens[idx])
             layer_input = output
 
-
+        ##print("[LOG] unpacking the sequence...", end=' ')
         X, _ = rnn.pad_packed_sequence(output, batch_first=True)
         
         # X.shape is (batch_size, seq_len, embedding_size)
@@ -152,7 +148,6 @@ class AWD_LSTM(LightningModule):
 
         X = X.view(self.batch_size, seq_len, self.nb_tags)
         # TODO: detach?
-       
         return X
         
     def configure_optimizers(self):
@@ -164,16 +159,8 @@ class AWD_LSTM(LightningModule):
     def train_dataloader(self):
         return DataLoader(self.train_dataset, batch_size=self.P.batch_size, collate_fn=utils.pad_sequences)
 
-    #TODO: the validation dataloader is only here so lightning can run fast_dev_run
-    def val_dataloader(self):
-        return DataLoader(self.val_dataset, batch_size=self.P.batch_size, collate_fn=utils.pad_sequences)
-
-    
-    def test_dataloader(self):
-            return DataLoader(self.test_dataset, batch_size=self.P.batch_size, collate_fn=utils.pad_sequences)
 
     def general_step(self, batch, batch_idx):
-        print('New batch!')
         x, y, x_lens, y_lens = batch
         output = self.forward(x, x_lens)
         loss = self.loss(output, y) 
@@ -184,7 +171,6 @@ class AWD_LSTM(LightningModule):
             labels: (batch_size, seq_len)
             
         """
-
         #1ST: expand prediction
 
         prediction = prediction.view(-1, self.nb_tags)
@@ -210,7 +196,6 @@ class AWD_LSTM(LightningModule):
         #4TH compute cross entropy loss which ignores all <PAD> tokens
         ce_loss = -torch.sum(prediction) / nb_tokens
 
-        # print("corss entropy loss: ", ce_loss)
         return ce_loss
 
 
@@ -218,21 +203,18 @@ class AWD_LSTM(LightningModule):
         loss = self.general_step(batch, batch_idx)
         tensorboard_logs = {'loss' : loss}
         
-        print("training loss: ", loss)
         return {'loss': loss, 'log': tensorboard_logs}
 
-    def validation_step(self, batch, batch_idx):
-        loss = self.general_step(batch, batch_idx)
+    # def validation_step(self, batch, batch_idx):
+    #     loss = self.general_step(batch, batch_idx)
         
-        print("validation loss: ", loss)
-        return {'val_loss': loss}
+    #     return {'val_loss': loss}
 
 
-    def test_step(self, batch, batch_idx):
-        loss = self.general_step(batch, batch_idx)
+    # def test_step(self, batch, batch_idx):
+    #     loss = self.general_step(batch, batch_idx)
         
-        print("test loss: ", loss)
-        return {'test_loss': loss}
+    #     return {'test_loss': loss}
     
     # def validation_epoch_end(self, outputs):
     #     avg_loss = torch.stack([x['val_loss'] for x in outputs]).mean()
@@ -250,16 +232,18 @@ class AWD_LSTM(LightningModule):
         parser.add_argument('--batch_size', type=int, default=2)
         parser.add_argument('--embedding_size', type=int, default=400)
         parser.add_argument('--hidden_size', type=int, default=600)
+        parser.add_argument('--n_layers', type=int, default=3)
         parser.add_argument('--lr', type=int, default=0.0001)
         parser.add_argument('--asgd', type=bool, default=True)
         parser.add_argument('--use_bias', type=bool, default=True) #TODO
         parser.add_argument('--p_dropout', type=float, default=0.5)
+        parser.add_argument('--weight_dropout', type=bool, default=False)
         return parser
 
 def build_argument_parser():
     parser = ArgumentParser()
     #TODO: chagne back to relative path (temp fix for debugger)
-    parser.add_argument('--dataset_path', type=str, default=r'C:\Users\User\Desktop\clara\datasets\chordwise\chamber\note_range38\sample_freq4\debussy')
+    parser.add_argument('--dataset_path', type=str, default=r'../dataset/debug_dataset')
     parser = AWD_LSTM.add_model_specific_args(parser) # Add model-specific args
     parser = Trainer.add_argparse_args(parser) # Add ALL training-specific args
     return parser
@@ -270,4 +254,4 @@ if __name__ == "__main__":
     model = AWD_LSTM(hparams)
     trainer = Trainer.from_argparse_args(hparams)
     trainer.fit(model)
-    trainer.test()
+    # trainer.test()
