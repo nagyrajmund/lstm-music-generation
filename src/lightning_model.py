@@ -68,16 +68,8 @@ class AWD_LSTM(LightningModule):
         self.P = hparams
 
         self.dataset = ClaraDataset(P.dataset_path)
-        
-        #TODO random shuffle dataset
-        # self.dataset = self.dataset.view(-1)[idx].view(self.dataset.size())
-        train_size = int(len(self.dataset)*0.8)
-        val_size = int(len(self.dataset)*0.1)
-        test_size = len(self.dataset) - train_size - val_size
-        self.train_dataset, self.val_dataset, self.test_dataset = random_split(self.dataset, [train_size, val_size, test_size])
-        
-
         print('[LOG] created dataset!')
+
         self.embedding = nn.Embedding(self.dataset.n_tokens, P.embedding_size)
 
         # Layers #TODO: is batch_first = True ok?
@@ -89,6 +81,16 @@ class AWD_LSTM(LightningModule):
 
         # Decoder
         self.decoder = nn.Linear(P.embedding_size, self.dataset.n_tokens)
+
+    def prepare_data(self):
+        
+        #TODO random shuffle dataset
+        train_size = int(len(self.dataset)*0.8)
+        val_size = int(len(self.dataset)*0.1)
+        test_size = len(self.dataset) - train_size - val_size
+        
+        self.train_dataset, self.val_dataset, self.test_dataset = random_split(self.dataset, [train_size, val_size, test_size])
+        print('[LOG] splited dataset!')
 
     def init_hidden(self, layer_hidden_size):
         # the weights are of the form (nb_layers, batch_size, nb_lstm_units)
@@ -158,9 +160,6 @@ class AWD_LSTM(LightningModule):
             return optim.ASGD(self.parameters(), lr=self.P.lr, lambd=0.0001, alpha=0.75, t0=1000000.0, weight_decay=0)
         return optim.Adam(self.parameters(), lr=self.P.lr)
 
-    def prepare_data(self):
-        #TODO load vocab dicts if there are any
-        pass
         
     def train_dataloader(self):
         return DataLoader(self.train_dataset, batch_size=self.P.batch_size, collate_fn=utils.pad_sequences)
@@ -170,16 +169,13 @@ class AWD_LSTM(LightningModule):
         return DataLoader(self.val_dataset, batch_size=self.P.batch_size, collate_fn=utils.pad_sequences)
 
     
-    # def test_dataloader(self):
-    #         return DataLoader(self.test_dataset, batch_size=self.P.batch_size, collate_fn=utils.pad_sequences)
+    def test_dataloader(self):
+            return DataLoader(self.test_dataset, batch_size=self.P.batch_size, collate_fn=utils.pad_sequences)
 
     def general_step(self, batch, batch_idx):
         print('New batch!')
         x, y, x_lens, y_lens = batch
         output = self.forward(x, x_lens)
-        print("labels shape: ", y.shape)
-        print("labels: ")
-        print(y)
         loss = self.loss(output, y) 
         return loss
 
@@ -205,7 +201,6 @@ class AWD_LSTM(LightningModule):
         mask = (labels > tag_pad_token).float()
         
         #3.2 count how many tokens we have
-        # nb_tokens = int(torch.sum(mask).data[0]) failed so use np instead
         nb_tokens = int(np.sum(mask.numpy()))
 
         #3.3 pick the values for the label and zero out the rest with the mask
@@ -214,26 +209,30 @@ class AWD_LSTM(LightningModule):
 
         #4TH compute cross entropy loss which ignores all <PAD> tokens
         ce_loss = -torch.sum(prediction) / nb_tokens
-        print("corss entropy loss: ", ce_loss)
+
+        # print("corss entropy loss: ", ce_loss)
         return ce_loss
 
-        # print("calculating cross entropy loss")
-        # criterion = nn.CrossEntropyLoss()
-        # loss = criterion(prediction, labels)
-        # return loss
 
     def training_step(self, batch, batch_idx):
         loss = self.general_step(batch, batch_idx)
         tensorboard_logs = {'loss' : loss}
+        
+        print("training loss: ", loss)
         return {'loss': loss, 'log': tensorboard_logs}
 
     def validation_step(self, batch, batch_idx):
-        return self.training_step(batch, batch_idx)
+        loss = self.general_step(batch, batch_idx)
+        
+        print("validation loss: ", loss)
+        return {'val_loss': loss}
 
 
-    # def test_step(self, batch, batch_idx):
-    #     loss = self.general_step(batch, batch_idx)
-    #     return {'test_loss': loss}
+    def test_step(self, batch, batch_idx):
+        loss = self.general_step(batch, batch_idx)
+        
+        print("test loss: ", loss)
+        return {'test_loss': loss}
     
     # def validation_epoch_end(self, outputs):
     #     avg_loss = torch.stack([x['val_loss'] for x in outputs]).mean()
@@ -271,3 +270,4 @@ if __name__ == "__main__":
     model = AWD_LSTM(hparams)
     trainer = Trainer.from_argparse_args(hparams)
     trainer.fit(model)
+    trainer.test()
