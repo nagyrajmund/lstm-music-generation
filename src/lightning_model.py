@@ -158,7 +158,7 @@ class AWD_LSTM(LightningModule):
 
         
     def train_dataloader(self):
-        return DataLoader(self.train_dataset, batch_size=self.P.batch_size, collate_fn=utils.pad_sequences, num_workers=self.P.num_workers))
+        return DataLoader(self.train_dataset, batch_size=self.P.batch_size, collate_fn=utils.pad_sequences, num_workers=self.P.num_workers)
 
 
     def general_step(self, batch, batch_idx):
