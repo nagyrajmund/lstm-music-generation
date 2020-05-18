@@ -266,9 +266,6 @@ class AWD_LSTM(LightningModule):
 
         for i in range(predic_len):
             
-            # NOTE: should hidden states be replaced by the trained ones?
-            # if put outsied the loop, output never get updated
-            
             initial_hiddens = [self.init_hidden(self.P.hidden_size) for _ in range(self.P.n_layers - 1)]
             initial_hiddens.append(self.init_hidden(self.P.embedding_size))
             
