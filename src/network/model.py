@@ -88,7 +88,7 @@ class AWD_LSTM(LightningModule):
 
     def prepare_data(self):
          # TODO: This is a hacked version for debug runs.
-         # We will ipmlement the dataset splitting later.        
+         # We will implement the dataset splitting later.        
         
         self.train_dataset = self.dataset #, self.val_dataset, self.test_dataset = random_split(self.dataset, [train_size, val_size, test_size])
 
@@ -225,7 +225,7 @@ class AWD_LSTM(LightningModule):
     #     tensorboard_logs = {'test_loss': avg_loss}
     #     return {'avg_test_loss': avg_loss, 'log': tensorboard_logs}
 
-    def generate(self, random_seed, input_len, predic_len):
+    def generate(self, random_seed=0, input_len=10, predic_len=10):
         
         '''
 
@@ -289,7 +289,7 @@ class AWD_LSTM(LightningModule):
         parser.add_argument('--n_layers', type=int, default=3)
         parser.add_argument('--lr', type=int, default=0.0001)
         parser.add_argument('--asgd', type=bool, default=True)
-        parser.add_argument('--use_bias', type=bool, default=True) #TODO
+        parser.add_argument('--use_bias', type=bool, default=True)
         parser.add_argument('--p_dropout', type=float, default=0.5)
         parser.add_argument('--weight_dropout', type=bool, default=False)
         parser.add_argument('--num_workers', type=int, default=1)

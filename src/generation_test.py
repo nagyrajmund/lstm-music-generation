@@ -1,4 +1,4 @@
-from utils.utils import write_mid_mp3_wav
+from utils.convert import write_mid_mp3_wav
 
 # An example for generating midi from chordwise notation.
 
