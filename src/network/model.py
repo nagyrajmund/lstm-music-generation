@@ -14,7 +14,6 @@ from data.datasets import ClaraDataset
 from data import utils
 from torch.utils.data.sampler import SubsetRandomSampler
 
-
 class WeightDropout(nn.Module):
     """ Adapted from original salesforce paper. """
     def __init__(self, module: nn.Module, p_dropout: float = 0.5): # Default value of p_dropout is 0.5 in the original paper!
@@ -63,7 +62,7 @@ class AWD_LSTM(LightningModule):
         """
         super().__init__()
         #TODO we have to load the dataset to get the number of tokens
-        self.P = hparams
+        self.P = P
         self.dataset = ClaraDataset(P.dataset_path)
 
         self.embedding = nn.Embedding(self.dataset.n_tokens, P.embedding_size)
@@ -280,7 +279,6 @@ class AWD_LSTM(LightningModule):
             layer_input = self.embedding(output)
 
         return predicted
-
         
     @staticmethod
     def add_model_specific_args(parent_parser):
@@ -296,21 +294,3 @@ class AWD_LSTM(LightningModule):
         parser.add_argument('--weight_dropout', type=bool, default=False)
         parser.add_argument('--num_workers', type=int, default=1)
         return parser
-
-def build_argument_parser():
-    parser = ArgumentParser()
-    parser.add_argument('--dataset_path', type=str, default=r'../dataset/debug_dataset')
-    parser = AWD_LSTM.add_model_specific_args(parser) # Add model-specific args
-    parser = Trainer.add_argparse_args(parser) # Add ALL training-specific args
-    return parser
-
-if __name__ == "__main__":
-    # Parse command-line args
-    hparams = build_argument_parser().parse_args()
-    model = AWD_LSTM(hparams)
-    trainer = Trainer.from_argparse_args(hparams)
-
-    # trainer.fit(model)
-    # generated_text = model.generate(1,5,7)
-    # print(generated_text)
-    # trainer.test()
