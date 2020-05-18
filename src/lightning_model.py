@@ -186,7 +186,7 @@ class AWD_LSTM(LightningModule):
         mask = (labels > tag_pad_token).float()
         
         #3.2 count how many tokens we have
-        nb_tokens = int(np.sum(mask.numpy()))
+        nb_tokens = int(np.sum(mask.cpu().numpy()))
 
         #3.3 pick the values for the label and zero out the rest with the mask
         #TODO very tricky type conversions here, better methods?
