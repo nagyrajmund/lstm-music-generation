@@ -158,7 +158,7 @@ class AWD_LSTM(LightningModule):
 
         
     def train_dataloader(self):
-        return DataLoader(self.train_dataset, batch_size=self.P.batch_size, collate_fn=utils.pad_sequences)
+        return DataLoader(self.train_dataset, batch_size=self.P.batch_size, collate_fn=utils.pad_sequences, num_workers=self.P.num_workers))
 
 
     def general_step(self, batch, batch_idx):
@@ -239,11 +239,11 @@ class AWD_LSTM(LightningModule):
         parser.add_argument('--use_bias', type=bool, default=True) #TODO
         parser.add_argument('--p_dropout', type=float, default=0.5)
         parser.add_argument('--weight_dropout', type=bool, default=False)
+        parser.add_argument('--num_workers', type=int, default=1)
         return parser
 
 def build_argument_parser():
     parser = ArgumentParser()
-    #TODO: chagne back to relative path (temp fix for debugger)
     parser.add_argument('--dataset_path', type=str, default=r'../dataset/debug_dataset')
     parser = AWD_LSTM.add_model_specific_args(parser) # Add model-specific args
     parser = Trainer.add_argparse_args(parser) # Add ALL training-specific args
