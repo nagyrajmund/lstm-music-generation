@@ -55,7 +55,6 @@ class AWD_LSTM(LightningModule):
             hidden_size:  hidden size; size of input and output in intermediate layers
             nlayers:  number of layers
             bias:  if True, use bias
-            device:  device
             dropout_wts:  dropout rate
             asgd:  if True, use ASGD
 
@@ -97,9 +96,8 @@ class AWD_LSTM(LightningModule):
 
     def init_hidden(self, layer_hidden_size):
         # the weights are of the form (nb_layers, batch_size, nb_lstm_units)
-        #TODO: correct device pls
-        h_init = torch.randn(1, self.P.batch_size, layer_hidden_size)#, device=self.device)
-        c_init = torch.randn(1, self.P.batch_size, layer_hidden_size)#, device=self.device)
+        h_init = torch.randn(1, self.P.batch_size, layer_hidden_size, device=self.device)
+        c_init = torch.randn(1, self.P.batch_size, layer_hidden_size, device=self.device)
 
         h_init = torch.autograd.Variable(h_init)
         c_init = torch.autograd.Variable(c_init)
