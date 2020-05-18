@@ -4,6 +4,7 @@ import torch.nn.functional as F
 import numpy as np
 from torch import Tensor
 from torch.utils.data import DataLoader
+from torch.utils.data import random_split
 from torch.nn.utils import rnn
 from torch import optim
 from pytorch_lightning.core.lightning import LightningModule
@@ -67,24 +68,14 @@ class AWD_LSTM(LightningModule):
         self.P = hparams
 
         self.dataset = ClaraDataset(P.dataset_path)
-
-        # building validation dataloader
-        val_split = 0.1
-        random_seed = 1
-        dataset_len = len(self.dataset)
-        indices = list(range(dataset_len))
-        split = int(np.floor(val_split * dataset_len))
         
-        # shuffle whole dataset
-        np.random.seed(random_seed)
-        np.random.shuffle(indices)
-
-        # shuffled indices 
-        train_indices, val_indices = indices[split:], indices[:split]
+        #TODO random shuffle dataset
+        # self.dataset = self.dataset.view(-1)[idx].view(self.dataset.size())
+        train_size = int(len(self.dataset)*0.8)
+        val_size = int(len(self.dataset)*0.1)
+        test_size = len(self.dataset) - train_size - val_size
+        self.train_dataset, self.val_dataset, self.test_dataset = random_split(self.dataset, [train_size, val_size, test_size])
         
-        # Creating data samplers and loaders:
-        self.train_sampler = SubsetRandomSampler(train_indices)
-        self.val_sampler = SubsetRandomSampler(val_indices)
 
         print('[LOG] created dataset!')
         self.embedding = nn.Embedding(self.dataset.n_tokens, P.embedding_size)
@@ -152,7 +143,7 @@ class AWD_LSTM(LightningModule):
         # Linear mapping
         X = self.decoder(X)
         self.nb_tags = X.shape[1]
-
+        
         # 4. Create log_softmax activations bc we're doing classification
         # Dim transformation: (batch_size * seq_len, nb_lstm_units) -> (batch_size, seq_len, nb_tags)
         X = F.log_softmax(X, dim=1)
@@ -172,14 +163,15 @@ class AWD_LSTM(LightningModule):
         pass
         
     def train_dataloader(self):
-        return DataLoader(self.dataset, batch_size=self.P.batch_size, collate_fn=utils.pad_sequences, sampler=self.train_sampler)
+        return DataLoader(self.train_dataset, batch_size=self.P.batch_size, collate_fn=utils.pad_sequences)
 
     #TODO: the validation dataloader is only here so lightning can run fast_dev_run
     def val_dataloader(self):
-        return DataLoader(self.dataset, batch_size=self.P.batch_size, collate_fn=utils.pad_sequences, sampler=self.val_sampler)
+        return DataLoader(self.val_dataset, batch_size=self.P.batch_size, collate_fn=utils.pad_sequences)
 
-        # return DataLoader(self.train_dataset, batch_size=self.P.batch_size, collate_fn=utils.pad_sequences)
-        
+    
+    # def test_dataloader(self):
+    #         return DataLoader(self.test_dataset, batch_size=self.P.batch_size, collate_fn=utils.pad_sequences)
 
     def general_step(self, batch, batch_idx):
         print('New batch!')
