@@ -116,32 +116,35 @@ class AWD_LSTM(LightningModule):
 
         Returns: hidden state vector and cell state vector as a tuple
         """
-        self.batch_size, seq_len = X.size()
         print('X shape:', X.shape)
+
+        self.batch_size, seq_len = X.size()
         X = self.embedding(X) # Dim transformation: (batch_size, seq_len, 1) -> (batch_size, seq_len, embedding_dim)
         print('X after embedding', X.shape)
     
-        idx = 0 # Iterate over chunks from all the sequences at the same time. 
-        output = torch.empty((self.batch_size, seq_len, self.hparams.embedding_size))
-        print('Output shape', output.shape)
-        print(X)
+        # idx = 0 # Iterate over chunks from all the sequences at the same time. 
+        # output = torch.empty((self.batch_size, seq_len, self.hparams.embedding_size))
+        # print('Output shape', output.shape)
+        # print(X)
         #TODO: how do I handle the X_lens argument for packing? i.e. if pack before the loop, how do we select the indices?
         #      if we pack the chunks in the loop, how do we select the indices still?
-        while idx < seq_len - self.hparams.chunk_size: 
-            X_chunk = X[:, idx:idx + self.hparams.chunk_size]     
-            X_chunk = rnn.pack_padded_sequence(X_chunk, X_lens, batch_first=True, enforce_sorted=False) #TODO enforce sorted
-            print('X after packing', X)
+        # while idx < seq_len - self.hparams.chunk_size: 
+            # X_chunk = X[:, idx:idx + self.hparams.chunk_size]     
+            # X_chunk = rnn.pack_padded_sequence(X_chunk, X_lens, batch_first=True, enforce_sorted=False) #TODO enforce sorted
+            # print('X after packing', X)
 
-            initial_hiddens = construct_initial_hiddens()                
+        initial_hiddens = construct_initial_hiddens()                
             
-            layer_input = X_chunk
-            for idx, LSTM_layer in enumerate(self.layers):
-                layer_output, (h, c) = LSTM_layer(layer_input, initial_hiddens[idx])
-                layer_input = layer_output
+            # layer_input = X_chunk
+        layer_input = X
+        for idx, LSTM_layer in enumerate(self.layers):
+            layer_output, (h, c) = LSTM_layer(layer_input, initial_hiddens[idx])
+            layer_input = layer_output
 
-            layer_output, _ = rnn.pad_packed_sequence(layer_output, batch_first=True)
+        # layer_output, _ = rnn.pad_packed_sequence(layer_output, batch_first=True)
+        output, _ = rnn.pad_packed_sequence(layer_output, batch_first=True)
 
-            network_output[:, idx:idx+self.hparams.chunk_size, :] = layer_output 
+        # network_output[:, idx:idx+self.hparams.chunk_size, :] = layer_output 
         # need to reshape the data so it goes into the linear layer
         
         output = output.contiguous().view(-1, self.hparams.embedding_size)
@@ -152,7 +155,7 @@ class AWD_LSTM(LightningModule):
         output = F.log_softmax(output, dim=1)
         
         output = output.view(self.batch_size, seq_len,  self.dataset.n_tokens)
-        print(output.shape)
+        # print(output.shape)
         # TODO: detach?
         return output
 

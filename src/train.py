@@ -19,4 +19,4 @@ if __name__ == "__main__":
     model = AWD_LSTM(hparams)
     trainer = Trainer.from_argparse_args(hparams)
     trainer.fit(model)
-    torch.save(learner.model.state_dict(), hparams.model_path + "/" + hparams.model_file)
+    # torch.save(learner.model.state_dict(), hparams.model_path + "/" + hparams.model_file)
