@@ -6,7 +6,7 @@ import torch
 
 def build_argument_parser():
     parser = ArgumentParser()
-    parser.add_argument('--dataset_path', type=str, default="../dataset/debug_dataset")
+    parser.add_argument('--dataset_path', type=str, default="../data/datasets/debug_dataset")
     parser.add_argument('--model_path', type=str, default="../saved_models")
     parser.add_argument('--model_file', type=str, default="model.pth")
     parser = AWD_LSTM.add_model_specific_args(parser) # Add model-specific args

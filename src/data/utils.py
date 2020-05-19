@@ -12,3 +12,13 @@ def pad_sequences(batch):
 
     return xx_pad, yy_pad, x_lens, y_lens
 
+def yield_batch_chunk(batch, chunk_size, stride):
+    """
+    A generator function for processing the batches of the input data 
+    in `chunk_size`-d chunks with the given stride.
+    """
+    idx = 0
+    sequence_len = batch.size()[0]
+    while idx < sequence_len - chunk_size:
+        yield batch[:, idx:idx+chunk_size]
+        idx += stride
