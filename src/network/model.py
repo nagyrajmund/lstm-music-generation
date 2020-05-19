@@ -58,7 +58,7 @@ class AWD_LSTM(LightningModule):
     def add_model_specific_args(parent_parser):
         parser = ArgumentParser(parents=[parent_parser], add_help=False)
         parser.add_argument('--batch_size', type=int, default=1)
-        parser.add_argument('--chunk_size', type=int, default=16)
+        parser.add_argument('--chunk_size', type=int, default=1)
         # If stride is not given, it's set to chunk_size to produce non-overlapping windows.
         # parser.add_argument('--stride', type=int, nargs='?') 
         parser.add_argument('--embedding_size', type=int, default=600) #todo def value
@@ -138,6 +138,7 @@ class AWD_LSTM(LightningModule):
 
         all_outputs = self.decoder(all_outputs)
         # -> all_outputs: (batch_size, n_chunks, chunk_size, n_tokens)
+        print() # TODO for debugging purposes only, remove if not needed
 
         # permute the outputs for the cross_entropy loss later 
         return all_outputs.permute(0, 3, 1, 2)
