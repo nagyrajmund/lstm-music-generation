@@ -4,9 +4,8 @@ import os
 from torch import LongTensor
 from torch.utils.data import Dataset, DataLoader
 
-
 class ClaraDataset(Dataset):
-    def __init__(self, dataset_path, dicts = None, chunk_size = 1):
+    def __init__(self, dataset_path, chunk_size, dicts = None):
         """
         Parameters:
             dataset_path:  path to the dataset as a string
@@ -43,12 +42,11 @@ class ClaraDataset(Dataset):
 
         # Pack_sequences expects lists of tensors!
         
-        sequences = [LongTensor(self.split_to_chunks(self.tokenise_as_numbers(self.fnames[i]))) for i in idxs]        
+        sequences = LongTensor([self.split_to_chunks(self.tokenise_as_numbers(self.fnames[i])) for i in idxs])
 
         # The labels are the same sequences as the inputs, shifted by one to the right
-        x = [sequence[:-1] for sequence in sequences] # Exclude last input to ensure that x and y are the same size
-        y = [sequence[1:] for sequence in sequences] 
-        #TODO: do this in only one comprehension :)
+        x = sequences[:, :-1] # Exclude last input to ensure that x and y are the same size
+        y = sequences[:, 1:]
         return x, y
 
     #TODO: should we store the dataset in memory? then we only have to tokenise once
@@ -93,6 +91,6 @@ class ClaraDataset(Dataset):
 
     def split_to_chunks(self, data):
         result = []
-        for i in range(0, len(data), self.chunk_size):
+        for i in range(0, len(data) - self.chunk_size, self.chunk_size):
             result.append(data[i:i + self.chunk_size])
         return result

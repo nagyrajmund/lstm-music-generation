@@ -41,7 +41,7 @@ class AWD_LSTM(LightningModule):
         super().__init__()
         #TODO we have to load the dataset to get the number of tokens
         self.hparams = hparams
-        self.dataset = ClaraDataset(hparams.dataset_path)
+        self.dataset = ClaraDataset(hparams.dataset_path, chunk_size=hparams.chunk_size)
 
         self.embedding = nn.Embedding(self.dataset.n_tokens, hparams.embedding_size)
 
@@ -57,15 +57,15 @@ class AWD_LSTM(LightningModule):
     @staticmethod
     def add_model_specific_args(parent_parser):
         parser = ArgumentParser(parents=[parent_parser], add_help=False)
-        parser.add_argument('--batch_size', type=int, default=2)
+        parser.add_argument('--batch_size', type=int, default=1)
         parser.add_argument('--chunk_size', type=int, default=16)
         # If stride is not given, it's set to chunk_size to produce non-overlapping windows.
-        parser.add_argument('--stride', type=int, nargs='?') 
-        parser.add_argument('--embedding_size', type=int, default=400)
-        parser.add_argument('--hidden_size', type=int, default=600)
-        parser.add_argument('--n_layers', type=int, default=3)
-        parser.add_argument('--lr', type=float, default=0.1)
-        parser.add_argument('--use_asgd', type=bool, default=True)
+        # parser.add_argument('--stride', type=int, nargs='?') 
+        parser.add_argument('--embedding_size', type=int, default=600) #todo def value
+        parser.add_argument('--hidden_size', type=int, default=400) #todo def value
+        parser.add_argument('--n_layers', type=int, default=1)
+        parser.add_argument('--lr', type=float, default=0.001)
+        parser.add_argument('--use_asgd', type=bool, default=False)
         parser.add_argument('--use_bias', type=bool, default=True)
         parser.add_argument('--use_weight_dropout', type=bool, default=False)
         parser.add_argument('--p_dropout', type=float, default=0.5)
@@ -95,17 +95,18 @@ class AWD_LSTM(LightningModule):
 
     def init_hidden(self, layer_hidden_size):
         # the weights are of the form (nb_layers, batch_size, nb_lstm_units)
-        h_init = torch.randn(1, self.hparams.batch_size, layer_hidden_size, device=self.device)
-        c_init = torch.randn(1, self.hparams.batch_size, layer_hidden_size, device=self.device)
-
-        h_init = torch.autograd.Variable(h_init)
-        c_init = torch.autograd.Variable(c_init)
+        if torch.cuda.is_available():
+            h_init = torch.autograd.Variable(torch.randn(1, self.hparams.batch_size, layer_hidden_size, device='cuda:0'))
+            c_init = torch.autograd.Variable(torch.randn(1, self.hparams.batch_size, layer_hidden_size, device='cuda:0'))
+        else:
+            h_init = torch.autograd.Variable(torch.randn(1, self.hparams.batch_size, layer_hidden_size))
+            c_init = torch.autograd.Variable(torch.randn(1, self.hparams.batch_size, layer_hidden_size))
 
         return (h_init, c_init)
 
     # ---------------------------- Forward pass and learning steps ----------------------------
 
-    def forward(self, X, X_lens): 
+    def forward(self, X_in):
         """
         Forward pass.
 
@@ -116,49 +117,31 @@ class AWD_LSTM(LightningModule):
 
         Returns: hidden state vector and cell state vector as a tuple
         """
-        print('X shape:', X.shape)
+        X_in = torch.squeeze(X_in, dim=0)
+        batch_size, n_chunks, chunk_size = X_in.size()
+        assert(chunk_size == self.hparams.chunk_size)
+        assert(batch_size == self.hparams.batch_size)
+        # X_in: (batch_size, n_chunks, chunk_size)
+        X_in = self.embedding(X_in)
+        # -> X_in: (batch_size, n_chunks, chunk_size, embedding_size)
+        all_outputs = torch.empty(batch_size, n_chunks, chunk_size, self.hparams.embedding_size)
+        # -> all_outputs: (batch_size, n_chunks, chunk_size, embedding_size)
+        for chunk_idx in range(chunk_size):
+            chunk = X_in[:, chunk_idx] 
+            # -> chunk: (batch_size, chunk_size, embedding_size)
+            initial_hiddens = self.construct_initial_hiddens()  
+            for layer_idx, LSTM_layer in enumerate(self.layers):
+                chunk, _ = LSTM_layer(chunk, initial_hiddens[layer_idx])
+                # -> chunk: (batch_size, chunk_size, embedding_size)
 
-        self.batch_size, seq_len = X.size()
-        X = self.embedding(X) # Dim transformation: (batch_size, seq_len, 1) -> (batch_size, seq_len, embedding_dim)
-        print('X after embedding', X.shape)
-    
-        # idx = 0 # Iterate over chunks from all the sequences at the same time. 
-        # output = torch.empty((self.batch_size, seq_len, self.hparams.embedding_size))
-        # print('Output shape', output.shape)
-        # print(X)
-        #TODO: how do I handle the X_lens argument for packing? i.e. if pack before the loop, how do we select the indices?
-        #      if we pack the chunks in the loop, how do we select the indices still?
-        # while idx < seq_len - self.hparams.chunk_size: 
-            # X_chunk = X[:, idx:idx + self.hparams.chunk_size]     
-            # X_chunk = rnn.pack_padded_sequence(X_chunk, X_lens, batch_first=True, enforce_sorted=False) #TODO enforce sorted
-            # print('X after packing', X)
+            all_outputs[:, chunk_idx] = chunk
 
-        initial_hiddens = construct_initial_hiddens()                
-            
-            # layer_input = X_chunk
-        layer_input = X
-        for idx, LSTM_layer in enumerate(self.layers):
-            layer_output, (h, c) = LSTM_layer(layer_input, initial_hiddens[idx])
-            layer_input = layer_output
+        all_outputs = self.decoder(all_outputs)
+        # -> all_outputs: (batch_size, n_chunks, chunk_size, n_tokens)
 
-        # layer_output, _ = rnn.pad_packed_sequence(layer_output, batch_first=True)
-        output, _ = rnn.pad_packed_sequence(layer_output, batch_first=True)
-
-        # network_output[:, idx:idx+self.hparams.chunk_size, :] = layer_output 
-        # need to reshape the data so it goes into the linear layer
-        
-        output = output.contiguous().view(-1, self.hparams.embedding_size)
-        output = self.decoder(output)
-
-        # 4. Create log_softmax activations bc we're doing classification
-        # Dim transformation: (batch_size * seq_len, nb_lstm_units) -> (batch_size, seq_len, 0)
-        output = F.log_softmax(output, dim=1)
-        
-        output = output.view(self.batch_size, seq_len,  self.dataset.n_tokens)
-        # print(output.shape)
-        # TODO: detach?
-        return output
-
+        # permute the outputs for the cross_entropy loss later 
+        return all_outputs.permute(0, 3, 1, 2)
+        # -> all_outputs: (batch_size, n_tokens, n_chunks, chunk_size)
     # ------------------------------------------------------------------------------------
 
     def construct_initial_hiddens(self):
@@ -178,50 +161,16 @@ class AWD_LSTM(LightningModule):
 
     def train_dataloader(self):
         return DataLoader(self.train_dataset, batch_size=self.hparams.batch_size, 
-                          collate_fn=utils.pad_sequences, num_workers=self.hparams.num_workers)
+                          num_workers=self.hparams.num_workers)
 
     # ------------------------------------------------------------------------------------
 
     def general_step(self, batch, batch_idx):
-        x, y, x_lens, y_lens = batch
-        output = self.forward(x, x_lens)
-        loss = self.loss(output, y) 
+        x, y = batch
+        output = self.forward(x)
+        y = torch.squeeze(y, dim=0)
+        loss = F.cross_entropy(output, y) 
         return loss
-
-    # ------------------------------------------------------------------------------------
-
-    def loss(self, prediction, labels):
-        
-        """ pred:   (batch_size, seq_len, n_tokens)
-            labels: (batch_size, seq_len)
-            
-        """
-        #1ST: expand prediction
-
-        prediction = prediction.view(-1, self.dataset.n_tokens)
-        # print("shape after flatten: ", prediction.shape)
-
-        #2ND: map labels to tokens
-        labels = labels.view(-1)
-
-
-        #3RD: compute ce loss
-        
-        #3.1 create a mask by filtering out all tokens that ARE NOT the padding token
-        tag_pad_token = 0
-        mask = (labels > tag_pad_token).float()
-        
-        #3.2 count how many tokens we have
-        nb_tokens = int(np.sum(mask.cpu().numpy()))
-
-        #3.3 pick the values for the label and zero out the rest with the mask
-        #TODO very tricky type conversions here, better methods?
-        prediction = prediction[range(int(list(prediction.size())[0])), labels] * mask
-
-        #4TH compute cross entropy loss which ignores all <PAD> tokens
-        ce_loss = -torch.sum(prediction) / nb_tokens
-
-        return ce_loss
 
     # ------------------------------------------------------------------------------------
 
