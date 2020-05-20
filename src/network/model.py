@@ -42,7 +42,6 @@ class AWD_LSTM(LightningModule):
         #TODO we have to load the dataset to get the number of tokens
         self.hparams = hparams
         self.dataset = ClaraDataset(hparams.dataset_path, chunk_size=hparams.chunk_size)
-        # self.device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
 
         self.embedding = nn.Embedding(self.dataset.n_tokens, hparams.embedding_size)
 
@@ -99,8 +98,8 @@ class AWD_LSTM(LightningModule):
     def init_hidden(self, layer_hidden_size):
         # the weights are of the form (nb_layers, batch_size, nb_lstm_units)
         if torch.cuda.is_available():
-            h_init = torch.autograd.Variable(torch.randn(1, self.hparams.batch_size, layer_hidden_size, device='cuda:0'))
-            c_init = torch.autograd.Variable(torch.randn(1, self.hparams.batch_size, layer_hidden_size, device='cuda:0'))
+            h_init = torch.autograd.Variable(torch.randn(1, self.hparams.batch_size, layer_hidden_size, device=self.device))
+            c_init = torch.autograd.Variable(torch.randn(1, self.hparams.batch_size, layer_hidden_size, device=self.device))
         else:
             h_init = torch.autograd.Variable(torch.randn(1, self.hparams.batch_size, layer_hidden_size))
             c_init = torch.autograd.Variable(torch.randn(1, self.hparams.batch_size, layer_hidden_size))
@@ -214,7 +213,7 @@ class AWD_LSTM(LightningModule):
         torch.manual_seed(random_seed)
 
         # generate input sequence, randomly sample from dataset.n_tokens
-        input_seq = torch.randint(0, self.dataset.n_tokens - 1, (input_len,))
+        input_seq = torch.randint(0, self.dataset.n_tokens - 1, (input_len,), device=self.device)
         
         # feed LongTensor to LSTM
         layer_input = torch.unsqueeze(torch.LongTensor(input_seq), 0)
