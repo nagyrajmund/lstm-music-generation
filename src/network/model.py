@@ -40,16 +40,13 @@ class AWD_LSTM(LightningModule):
             hparams:  command-line arguments, see add_model_specific_args() for details
         """
         super().__init__()
+        self.device = "cuda:0" if torch.cuda.is_available() else "cpu"
         #TODO we have to load the dataset to get the number of tokens
         self.hparams = hparams
         self.dataset = ClaraDataset(hparams.dataset_path, chunk_size=hparams.chunk_size)
 
         self.embedding = nn.Embedding(self.dataset.n_tokens, hparams.embedding_size)
-
-        # Layers #TODO: is batch_first = True ok?
         self.layers = self.construct_LSTM_layers()
-
-        # Decoder
         self.decoder = nn.Linear(hparams.embedding_size, self.dataset.n_tokens)
 
     
@@ -58,6 +55,8 @@ class AWD_LSTM(LightningModule):
 
     @staticmethod
     def add_model_specific_args(parent_parser):
+        #TODO: boolean arguments don't work as expected, watch out!
+        #      if you pass any value to them, e.g `python train.py use_bias --False` then use_bias will be set to True!
         parser = ArgumentParser(parents=[parent_parser], add_help=False)
         parser.add_argument('--batch_size', type=int, default=1)
         parser.add_argument('--chunk_size', type=int, default=1)
