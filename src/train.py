@@ -17,6 +17,6 @@ if __name__ == "__main__":
     # Parse command-line args
     hparams = build_argument_parser().parse_args()
     model = AWD_LSTM(hparams)
-    trainer = Trainer.from_argparse_args(hparams)
-    trainer.fit(model)
-    torch.save(trainer.model.state_dict(), hparams.model_path + "/" + hparams.model_file)
+    # trainer = Trainer.from_argparse_args(hparams)
+    # trainer.fit(model)
+    torch.save(model.state_dict(), hparams.model_path + "/" + hparams.model_file)
