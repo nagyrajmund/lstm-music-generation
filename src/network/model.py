@@ -42,7 +42,7 @@ class AWD_LSTM(LightningModule):
         #TODO we have to load the dataset to get the number of tokens
         self.hparams = hparams
         self.dataset = ClaraDataset(hparams.dataset_path, chunk_size=hparams.chunk_size)
-        self.device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
+        # self.device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
 
         self.embedding = nn.Embedding(self.dataset.n_tokens, hparams.embedding_size)
 
@@ -77,6 +77,7 @@ class AWD_LSTM(LightningModule):
     # ---------------------------- Initialisation ----------------------------
     
     def construct_LSTM_layers(self):
+        
         LSTM_layers = []
         for i in range(self.hparams.n_layers):
             input_size = self.hparams.embedding_size if i == 0 else self.hparams.hidden_size
@@ -138,7 +139,8 @@ class AWD_LSTM(LightningModule):
 
             all_outputs[:, chunk_idx] = chunk
 
-        all_outputs = self.decoder(all_outputs).to(self.device)
+        # all_outputs = self.decoder(all_outputs).to(self.device)
+        all_outputs = self.decoder(all_outputs)
         # -> all_outputs: (batch_size, n_chunks, chunk_size, n_tokens)
 
         # permute the outputs for the cross_entropy loss later 
