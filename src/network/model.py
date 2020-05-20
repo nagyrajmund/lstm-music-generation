@@ -40,7 +40,6 @@ class AWD_LSTM(LightningModule):
             hparams:  command-line arguments, see add_model_specific_args() for details
         """
         super().__init__()
-        self.device = "cuda:0" if torch.cuda.is_available() else "cpu"
         #TODO we have to load the dataset to get the number of tokens
         self.hparams = hparams
         self.dataset = ClaraDataset(hparams.dataset_path, chunk_size=hparams.chunk_size)
@@ -49,6 +48,8 @@ class AWD_LSTM(LightningModule):
         self.layers = self.construct_LSTM_layers()
         self.decoder = nn.Linear(hparams.embedding_size, self.dataset.n_tokens)
 
+        if not torch.cuda.is_available():
+            self.device = "cpu"
     
 
     # ---------------------------- Model parameters ----------------------------
