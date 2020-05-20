@@ -99,8 +99,8 @@ class AWD_LSTM(LightningModule):
     def init_hidden(self, layer_hidden_size):
         # the weights are of the form (nb_layers, batch_size, nb_lstm_units)
         if torch.cuda.is_available():
-            h_init = torch.autograd.Variable(torch.randn(1, self.hparams.batch_size, layer_hidden_size, device='cuda:0'))
-            c_init = torch.autograd.Variable(torch.randn(1, self.hparams.batch_size, layer_hidden_size, device='cuda:0'))
+            h_init = torch.autograd.Variable(torch.randn(1, self.hparams.batch_size, layer_hidden_size, device=self.device))
+            c_init = torch.autograd.Variable(torch.randn(1, self.hparams.batch_size, layer_hidden_size, device=self.device))
         else:
             h_init = torch.autograd.Variable(torch.randn(1, self.hparams.batch_size, layer_hidden_size))
             c_init = torch.autograd.Variable(torch.randn(1, self.hparams.batch_size, layer_hidden_size))
