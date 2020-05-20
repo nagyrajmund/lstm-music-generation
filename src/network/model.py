@@ -138,8 +138,8 @@ class AWD_LSTM(LightningModule):
 
             all_outputs[:, chunk_idx] = chunk
 
-        # all_outputs = self.decoder(all_outputs).to(self.device)
-        all_outputs = self.decoder(all_outputs)
+        all_outputs = self.decoder(all_outputs).to(self.device)
+        # all_outputs = self.decoder(all_outputs)
         # -> all_outputs: (batch_size, n_chunks, chunk_size, n_tokens)
 
         # permute the outputs for the cross_entropy loss later 
