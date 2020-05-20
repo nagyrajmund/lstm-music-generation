@@ -97,13 +97,8 @@ class AWD_LSTM(LightningModule):
         self.train_dataset = self.dataset #, self.val_dataset, self.test_dataset = random_split(self.dataset, [train_size, val_size, test_size])
 
     def init_hidden(self, layer_hidden_size):
-        # the weights are of the form (nb_layers, batch_size, nb_lstm_units)
-        if torch.cuda.is_available():
-            h_init = torch.autograd.Variable(torch.randn(1, self.hparams.batch_size, layer_hidden_size, device=self.device))
-            c_init = torch.autograd.Variable(torch.randn(1, self.hparams.batch_size, layer_hidden_size, device=self.device))
-        else:
-            h_init = torch.autograd.Variable(torch.randn(1, self.hparams.batch_size, layer_hidden_size))
-            c_init = torch.autograd.Variable(torch.randn(1, self.hparams.batch_size, layer_hidden_size))
+        h_init = torch.autograd.Variable(torch.randn(1, self.hparams.batch_size, layer_hidden_size, device=self.device))
+        c_init = torch.autograd.Variable(torch.randn(1, self.hparams.batch_size, layer_hidden_size, device=self.device))
 
         return (h_init, c_init)
 
@@ -121,13 +116,15 @@ class AWD_LSTM(LightningModule):
         Returns: hidden state vector and cell state vector as a tuple
         """
         X_in = torch.squeeze(X_in, dim=0)
+        # -> X_in: (batch_size, n_chunks, chunk_size)
+        
         batch_size, n_chunks, chunk_size = X_in.size()
         assert(chunk_size == self.hparams.chunk_size)
         assert(batch_size == self.hparams.batch_size)
-        # X_in: (batch_size, n_chunks, chunk_size)
+
         X_in = self.embedding(X_in)
         # -> X_in: (batch_size, n_chunks, chunk_size, embedding_size)
-        all_outputs = torch.empty(batch_size, n_chunks, chunk_size, self.hparams.embedding_size)
+        all_outputs = torch.empty(batch_size, n_chunks, chunk_size, self.hparams.embedding_size, device=self.device)
         # -> all_outputs: (batch_size, n_chunks, chunk_size, embedding_size)
         for chunk_idx in range(chunk_size):
             chunk = X_in[:, chunk_idx] 
@@ -139,8 +136,7 @@ class AWD_LSTM(LightningModule):
 
             all_outputs[:, chunk_idx] = chunk
 
-        all_outputs = self.decoder(all_outputs).to(self.device)
-        # all_outputs = self.decoder(all_outputs)
+        all_outputs = self.decoder(all_outputs)
         # -> all_outputs: (batch_size, n_chunks, chunk_size, n_tokens)
 
         # permute the outputs for the cross_entropy loss later 
