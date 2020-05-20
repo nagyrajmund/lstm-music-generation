@@ -13,6 +13,7 @@ from argparse import ArgumentParser
 from data.datasets import ClaraDataset
 from data import utils
 from torch.utils.data.sampler import SubsetRandomSampler
+from tqdm import tqdm
 
 # TODO other dropout methods? e.g. variational dropout
 # TODO implement windowed bptt
@@ -98,8 +99,8 @@ class AWD_LSTM(LightningModule):
     def init_hidden(self, layer_hidden_size):
         # the weights are of the form (nb_layers, batch_size, nb_lstm_units)
         if torch.cuda.is_available():
-            h_init = torch.autograd.Variable(torch.randn(1, self.hparams.batch_size, layer_hidden_size, device=self.device))
-            c_init = torch.autograd.Variable(torch.randn(1, self.hparams.batch_size, layer_hidden_size, device=self.device))
+            h_init = torch.autograd.Variable(torch.randn(1, self.hparams.batch_size, layer_hidden_size, device='cuda:0'))
+            c_init = torch.autograd.Variable(torch.randn(1, self.hparams.batch_size, layer_hidden_size, device='cuda:0'))
         else:
             h_init = torch.autograd.Variable(torch.randn(1, self.hparams.batch_size, layer_hidden_size))
             c_init = torch.autograd.Variable(torch.randn(1, self.hparams.batch_size, layer_hidden_size))
@@ -224,7 +225,7 @@ class AWD_LSTM(LightningModule):
         predicted = []
         
 
-        for i in range(predic_len):
+        for i in tqdm(range(predic_len)):
             
             initial_hiddens = [self.init_hidden(self.hparams.hidden_size) for _ in range(self.hparams.n_layers - 1)]
             initial_hiddens.append(self.init_hidden(self.hparams.embedding_size))
