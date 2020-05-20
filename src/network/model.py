@@ -50,7 +50,6 @@ class AWD_LSTM(LightningModule):
 
         if not torch.cuda.is_available():
             self.device = "cpu"
-    
 
     # ---------------------------- Model parameters ----------------------------
 

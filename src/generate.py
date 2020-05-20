@@ -23,12 +23,15 @@ if __name__ == "__main__":
     # Parse command-line args
     args = build_argument_parser()
     args.add_argument('--dataset_path', type=str, default="../data/datasets/debug_dataset")
-
+    
     # Load model
     args = \
         AWD_LSTM.add_model_specific_args(args).parse_args() # TODO Placeholder for the constructor parameter, change it
     model = AWD_LSTM(args)
-    model.load_state_dict(torch.load(args.model_path + "/" + args.model_file))
+    if torch.cuda.is_available():
+        model.load_state_dict(torch.load(args.model_path + "/" + args.model_file))
+    else:
+        model.load_state_dict(torch.load(args.model_path + "/" + args.model_file, map_location=torch.device('cpu')))
     model.eval()
 
     # Generate
