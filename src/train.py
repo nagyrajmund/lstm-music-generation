@@ -1,5 +1,6 @@
 from argparse import ArgumentParser
 from pytorch_lightning import Trainer
+from pytorch_lightning.callbacks import ModelCheckpoint
 from network.model import AWD_LSTM
 from utils.convert import write_mid_mp3_wav
 import torch
@@ -17,6 +18,7 @@ if __name__ == "__main__":
     # Parse command-line args
     hparams = build_argument_parser().parse_args()
     model = AWD_LSTM(hparams)
+    checkpoint_callback = ModelCheckpoint(filepath=hparams.model_path , period = 100, save_weights_only=True)
     trainer = Trainer.from_argparse_args(hparams)
     trainer.fit(model)
-    torch.save(model.state_dict(), hparams.model_path + "/" + hparams.model_file)
+    # torch.save(model.state_dict(), hparams.model_path + "/" + hparams.model_file)
