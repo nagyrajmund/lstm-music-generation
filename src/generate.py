@@ -6,10 +6,10 @@ import torch
 
 def build_argument_parser():
     parser = ArgumentParser()
-    parser.add_argument('--model_path', type=str, default="../models")
-    parser.add_argument('--model_file', type=str, default="model.pth")
-    parser.add_argument('--output_path', type=str, default="../data/generated_outputs/debug_dataset")
-    parser.add_argument('--output_name', type=str, default=None)
+    parser.add_argument('--model_path', type=str, default="../models", help='model directory')
+    parser.add_argument('--model_file', type=str, default="model", help='model file without extension')
+    parser.add_argument('--output_path', type=str, default="../data/generated_outputs/debug_dataset", help='output directory')
+    parser.add_argument('--output_name', type=str, default=None, help='file to save output to (without extension)')
     parser.add_argument('--random_seed', type=int, default="0")
     parser.add_argument('--input_len', type=int, default="100")
     parser.add_argument('--predic_len', type=int, default="100")
@@ -27,7 +27,7 @@ if __name__ == "__main__":
         args.output_name = args.model_file + "_" + str(args.input_len) + "_" + str(args.predic_len)
 
     # Full path to model
-    model_full_path = args.model_path + "/" + args.model_file
+    model_full_path = args.model_path + "/" + args.model_file + ".pth"
     
     # Load model
     if torch.cuda.is_available():

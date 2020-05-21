@@ -7,6 +7,7 @@ import music21
 import random
 
 # Copied from https://github.com/mcleavey/musical-neural-net/. Paths have been changed.
+# TODO rewrite
     
 def write_midi(s, filename, output_folder):
     fp = s.write('midi', fp=output_folder + "/" + filename)
@@ -126,7 +127,7 @@ def arrToStreamNotewise(score, sample_freq, note_offset):
 def write_mid_mp3_wav(stream, fname, sample_freq, note_offset, out, chordwise):
     stream_out=string_inds_to_stream(stream, sample_freq, note_offset, chordwise)
     write_midi(stream_out, fname, out)
-    base=out + "/" + fname[:-4]
+    # base=out + "/" + fname
     # Unix commands
     # os.system(f'./scripts/mid2mp3.sh {base}.mid')
     # os.system(f'mpg123 -w {base}.wav {base}.mp3')

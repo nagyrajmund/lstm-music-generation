@@ -8,9 +8,9 @@ import pickle
 
 def build_argument_parser():
     parser = ArgumentParser()
-    parser.add_argument('--dataset_path', type=str, default="../data/datasets/debug_dataset")
-    parser.add_argument('--model_path', type=str, default="../models")
-    parser.add_argument('--model_file', type=str, default="model.pth")
+    parser.add_argument('--dataset_path', type=str, default="../data/datasets/debug_dataset", help='dataset path')
+    parser.add_argument('--model_path', type=str, default="../models", help='model directory')
+    parser.add_argument('--model_file', type=str, default="model", help='model file without extension')
     parser = AWD_LSTM.add_model_specific_args(parser) # Add model-specific args
     parser = Trainer.add_argparse_args(parser) # Add ALL training-specific args
     return parser
@@ -18,17 +18,6 @@ def build_argument_parser():
 if __name__ == "__main__":
     # Parse command-line args
     hparams = build_argument_parser().parse_args()
-    model = AWD_LSTM(hparams)
-    checkpoint_callback = ModelCheckpoint(filepath=hparams.model_path, 
-                                          monitor='loss',
-                                          mode='min',
-                                          save_top_k=1,
-                                          period = 10, 
-                                          save_weights_only=True)
-                                          
-    trainer = Trainer.from_argparse_args(hparams, checkpoint_callback=checkpoint_callback)
+    model = AWD_LSTM(hparams)             
+    trainer = Trainer.from_argparse_args(hparams)
     trainer.fit(model)
-
-    # Save state dict with parameters
-    model_data = {'state_dict': model.state_dict(), 'hparams': hparams}
-    torch.save(model_data, hparams.model_path + "/" + hparams.model_file)

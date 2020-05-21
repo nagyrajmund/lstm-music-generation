@@ -60,6 +60,7 @@ class AWD_LSTM(LightningModule):
         parser = ArgumentParser(parents=[parent_parser], add_help=False)
         parser.add_argument('--batch_size', type=int, default=1)
         parser.add_argument('--chunk_size', type=int, default=1)
+        parser.add_argument('--save_interval', type=int, default=5)
         # If stride is not given, it's set to chunk_size to produce non-overlapping windows.
         # parser.add_argument('--stride', type=int, nargs='?') 
         parser.add_argument('--embedding_size', type=int, default=600) #todo def value
@@ -178,6 +179,28 @@ class AWD_LSTM(LightningModule):
         tensorboard_logs = {'loss' : loss}
         
         return {'loss': loss, 'log': tensorboard_logs}
+
+    # ------------------------------------------------------------------------------------
+
+    def training_epoch_end(self, outputs):
+        if (self.trainer.current_epoch != 0) and (self.trainer.current_epoch % self.hparams.save_interval == 0):
+            # Save state dict with parameters (checkpoint)
+            model_data = {'state_dict': self.state_dict(), 'hparams': self.hparams}
+            model_full_path = \
+                self.hparams.model_path + "/" + self.hparams.model_file + "_" + str(self.trainer.current_epoch) + "epochs.pth"
+            torch.save(model_data, model_full_path)
+
+        # Average loss
+        avg_loss = torch.stack([x['loss'] for x in outputs]).mean()
+        tensorboard_logs = {'train_loss': avg_loss}
+        return {'avg_train_loss': avg_loss, 'log': tensorboard_logs}
+
+    # ------------------------------------------------------------------------------------
+
+    def on_train_end(self):
+        # Save state dict with parameters at the end of the training
+        model_data = {'state_dict': self.state_dict(), 'hparams': self.hparams}
+        torch.save(model_data, self.hparams.model_path + "/" + self.hparams.model_file + ".pth")
 
     # ---------------------------- Generate new music ----------------------------
 
