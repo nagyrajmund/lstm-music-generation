@@ -30,5 +30,5 @@ if __name__ == "__main__":
     trainer.fit(model)
 
     # Save state dict with parameters
-    model_data = [model.state_dict(), hparams]
+    model_data = {'state_dict': model.state_dict(), 'hparams': hparams}
     torch.save(model_data, hparams.model_path + "/" + hparams.model_file)
