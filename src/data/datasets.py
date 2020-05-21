@@ -78,7 +78,7 @@ class ClaraDataset(Dataset):
                     if token not in note_to_ind:
                         note_to_ind[token] = len(note_to_ind)
 
-        ind_to_note = note_to_ind.keys()
+        ind_to_note = list(note_to_ind.keys())
 
         return note_to_ind, ind_to_note
 

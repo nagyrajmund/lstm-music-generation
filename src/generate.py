@@ -44,7 +44,7 @@ if __name__ == "__main__":
     generated_ind = model.generate(args.random_seed, args.input_len, args.predic_len)
 
     # Convert tokens to notes
-    ind_to_note = list(model.dataset.ind_to_note)
+    ind_to_note = model.dataset.ind_to_note
     notes = [ind_to_note[ind] for ind in generated_ind] 
     notes = " ".join(notes)
 

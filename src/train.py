@@ -19,7 +19,7 @@ if __name__ == "__main__":
     # Parse command-line args
     hparams = build_argument_parser().parse_args()
     model = AWD_LSTM(hparams)
-    checkpoint_callback = ModelCheckpoint(filepath=hparams.model_path , 
+    checkpoint_callback = ModelCheckpoint(filepath=hparams.model_path, 
                                           monitor='loss',
                                           mode='min',
                                           save_top_k=1,
