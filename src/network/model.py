@@ -13,10 +13,11 @@ from argparse import ArgumentParser
 from data.datasets import ClaraDataset
 from data import utils
 from torch.utils.data.sampler import SubsetRandomSampler
+from torch.autograd import Variable
 from tqdm import tqdm
 
-# TODO other dropout methods? e.g. variational dropout
-# TODO implement windowed bptt
+# TODO embedding dropout
+# TODO implement variational length backprop
 
 class AWD_LSTM(LightningModule):
     """
@@ -45,6 +46,7 @@ class AWD_LSTM(LightningModule):
         self.dataset = ClaraDataset(hparams.dataset_path, chunk_size=hparams.chunk_size)
 
         self.embedding = nn.Embedding(self.dataset.n_tokens, hparams.embedding_size)
+        # TODO self.vd = VariationalDropout()
         self.layers = self.construct_LSTM_layers()
         self.decoder = nn.Linear(hparams.embedding_size, self.dataset.n_tokens)
 
@@ -58,20 +60,25 @@ class AWD_LSTM(LightningModule):
         #TODO: boolean arguments don't work as expected, watch out!
         #      if you pass any value to them, e.g `python train.py use_bias --False` then use_bias will be set to True!
         parser = ArgumentParser(parents=[parent_parser], add_help=False)
-        parser.add_argument('--batch_size', type=int, default=1)
-        parser.add_argument('--chunk_size', type=int, default=1)
-        parser.add_argument('--save_interval', type=int, default=5)
+        parser.add_argument('--batch_size', type=int, default=1, help='batch size')
+        parser.add_argument('--chunk_size', type=int, default=1, help='chunk size')
+        parser.add_argument('--save_interval', type=int, default=100, help='checkpoint saving interval (in epochs)')
         # If stride is not given, it's set to chunk_size to produce non-overlapping windows.
         # parser.add_argument('--stride', type=int, nargs='?') 
-        parser.add_argument('--embedding_size', type=int, default=600) #todo def value
-        parser.add_argument('--hidden_size', type=int, default=400) #todo def value
-        parser.add_argument('--n_layers', type=int, default=1)
-        parser.add_argument('--lr', type=float, default=0.001)
-        parser.add_argument('--use_asgd', type=bool, default=False)
-        parser.add_argument('--use_bias', type=bool, default=True)
-        parser.add_argument('--use_weight_dropout', type=bool, default=False)
-        parser.add_argument('--p_dropout', type=float, default=0.5)
-        parser.add_argument('--num_workers', type=int, default=1)
+        parser.add_argument('--embedding_size', type=int, default=600, help='embedding size') #todo def value
+        parser.add_argument('--hidden_size', type=int, default=400, help='hidden size') #todo def value
+        parser.add_argument('--n_layers', type=int, default=1, help='number of LSTM layers')
+        parser.add_argument('--lr', type=float, default=0.001, help='learning rate')
+        parser.add_argument('--use_asgd', type=bool, default=False, help='use ASGD')
+        parser.add_argument('--use_bias', type=bool, default=True, help='use bias')
+        parser.add_argument('--use_weight_dropout', type=bool, default=False, help='use weight dropout')
+        parser.add_argument('--p_dropout', type=float, default=0.5, help='dropout rate for weight dropout')
+        parser.add_argument('--dropouti', type=float, default=0.5, help='dropout rate in input layer (for variational dropout)')
+        parser.add_argument('--dropouth', type=float, default=0.5, help='dropout rate in hidden layer (for variational dropout)')
+        parser.add_argument('--dropouto', type=float, default=0.5, help='dropout rate in output layer (for variational dropout)')
+        parser.add_argument('--alpha', type=float, default=0, help='coefficient for activation regularization')
+        parser.add_argument('--beta', type=float, default=0, help='coefficient for temporal activation regularization')
+        parser.add_argument('--num_workers', type=int, default=1, help='number of workers')
         return parser
 
     # ---------------------------- Initialisation ----------------------------
@@ -124,22 +131,29 @@ class AWD_LSTM(LightningModule):
 
         X_in = self.embedding(X_in)
         # -> X_in: (batch_size, n_chunks, chunk_size, embedding_size)
+        # TODO X_in = self.vd(X_in, self.hparams.dropouti) # Variational dropout
         all_outputs = torch.empty(batch_size, n_chunks, chunk_size, self.hparams.embedding_size, device=self.device)
         # -> all_outputs: (batch_size, n_chunks, chunk_size, embedding_size)
         for chunk_idx in range(chunk_size):
-            chunk = X_in[:, chunk_idx] 
+            chunk = X_in[:, chunk_idx]
             # -> chunk: (batch_size, chunk_size, embedding_size)
             initial_hiddens = self.construct_initial_hiddens()  
             for layer_idx, LSTM_layer in enumerate(self.layers):
                 chunk, _ = LSTM_layer(chunk, initial_hiddens[layer_idx])
                 # -> chunk: (batch_size, chunk_size, embedding_size)
 
+                # Variational dropout TODO
+                # if layer_idx == self.hparams.n_layers:
+                #     chunk = self.vd(chunk, self.hparams.dropouth)
+                # else:
+                #     chunk = self.vd(chunk, self.hparams.dropouto)
+
             all_outputs[:, chunk_idx] = chunk
 
         all_outputs = self.decoder(all_outputs)
         # -> all_outputs: (batch_size, n_chunks, chunk_size, n_tokens)
 
-        # permute the outputs for the cross_entropy loss later 
+        # permute the outputs for the cross_entropy loss later
         return all_outputs.permute(0, 3, 1, 2)
         # -> all_outputs: (batch_size, n_tokens, n_chunks, chunk_size)
     # ------------------------------------------------------------------------------------
@@ -169,7 +183,16 @@ class AWD_LSTM(LightningModule):
         x, y = batch
         output = self.forward(x)
         y = torch.squeeze(y, dim=0)
-        loss = F.cross_entropy(output, y) 
+        loss = F.cross_entropy(output, y)
+
+        # Activation regularization # TODO check
+        if self.hparams.alpha:
+            loss += self.hparams.alpha * sum(output[:, :, :, i].pow(2).mean() for i in range(self.hparams.chunk_size))
+
+        # Temporal activation regularization
+        if self.hparams.beta:
+            diff = output[:, :, :, 1:] - output[:, :, :, :-1]
+            loss += self.hparams.beta * sum(diff[:, :, :, i].pow(2).mean() for i in range(self.hparams.chunk_size - 1))
         return loss
 
     # ------------------------------------------------------------------------------------
@@ -204,11 +227,8 @@ class AWD_LSTM(LightningModule):
 
     # ---------------------------- Generate new music ----------------------------
 
-
     def generate(self, random_seed=0, input_len=10, predic_len=10):
-        
         '''
-
         Parameters: 
             random_seed : seed to generate random input sequence
             input_len   : length of input sequence
@@ -290,3 +310,18 @@ class WeightDropout(nn.Module):
     def forward(self, input, hiddens):
         self._setweights()
         return self.module(input, hiddens)
+
+class VariationalDropout(nn.Module):
+    """ Adapted from original salesforce paper. TODO rewrite logic """
+
+    def __init__(self):
+        super().__init__()
+
+    def forward(self, x, dropout=0.5):
+        if dropout is None:
+            return x
+
+        m = x.data.new(1, x.size(1), x.size(2)).bernoulli_(1 - dropout)
+        mask = Variable(m, requires_grad=False) / (1 - dropout)
+        mask = mask.expand_as(x)
+        return mask * x

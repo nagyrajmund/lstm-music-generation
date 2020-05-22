@@ -18,6 +18,6 @@ def build_argument_parser():
 if __name__ == "__main__":
     # Parse command-line args
     hparams = build_argument_parser().parse_args()
-    model = AWD_LSTM(hparams)             
+    model = AWD_LSTM(hparams)
     trainer = Trainer.from_argparse_args(hparams)
     trainer.fit(model)
