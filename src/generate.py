@@ -48,15 +48,15 @@ if __name__ == "__main__":
     generated_ind = model.generate(args.random_seed, args.input_len, args.predic_len)
 
     # Convert tokens to notes
-    ind_to_note = model.dataset.ind_to_note
+    num_to_note = model.dataset.num_to_note
     notes = []
     
     for ind in generated_ind:
-        if ind_to_note[ind].startswith("wait"):
+        if num_to_note[ind].startswith("wait"):
             if random.uniform(0, 1) > args.remove_wait_percent:
-                notes.append(ind_to_note[ind])
+                notes.append(num_to_note[ind])
         else:
-            notes.append(ind_to_note[ind])
+            notes.append(num_to_note[ind])
             
     notes = " ".join(notes)
 

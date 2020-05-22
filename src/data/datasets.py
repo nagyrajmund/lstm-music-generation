@@ -10,7 +10,7 @@ class ClaraDataset(Dataset):
         """
         Parameters:
             dataset_path:  path to the dataset as a string
-            dicts:  a list containing note_to_ind (dict) and ind_to_note (list)
+            dicts:  a list containing note_to_num (dict) and num_to_note (list)
         """
         self.chunk_size = chunk_size
         self.batch_size = batch_size
@@ -100,8 +100,8 @@ class ClaraDataset(Dataset):
             dataset_path:  path to the dataset as a string
         
         Return:  
-            note_to_ind:  dictionary for converting tokens to numbers
-            ind_to_note:  list for converting numbers to tokens
+            note_to_num:  dictionary for converting tokens to numbers
+            num_to_note:  list for converting numbers to tokens
         """
         note_to_num = {} #TODO: should we have special tokens for START and END?
         song_lengths = []

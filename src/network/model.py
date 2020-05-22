@@ -58,8 +58,8 @@ class AWD_LSTM(LightningModule):
     @staticmethod
     def add_model_specific_args(parent_parser):
         parser = ArgumentParser(parents=[parent_parser], add_help=False)
-        parser.add_argument('--batch_size', type=int, default=128, help='batch size')
-        parser.add_argument('--chunk_size', type=int, default=16, help='chunk size')
+        parser.add_argument('--batch_size', type=int, default=16, help='batch size')
+        parser.add_argument('--chunk_size', type=int, default=4, help='chunk size')
         parser.add_argument('--save_interval', type=int, default=100, help='checkpoint saving interval (in epochs)')
         # If stride is not given, it's set to chunk_size to produce non-overlapping windows.
         # parser.add_argument('--stride', type=int, nargs='?') 
@@ -83,7 +83,6 @@ class AWD_LSTM(LightningModule):
     # ---------------------------- Initialisation ----------------------------
     
     def construct_LSTM_layers(self):
-        
         LSTM_layers = []
         for i in range(self.hparams.n_layers):
             input_size = self.hparams.embedding_size if i == 0 else self.hparams.hidden_size
@@ -244,37 +243,19 @@ class AWD_LSTM(LightningModule):
         torch.manual_seed(random_seed)
 
         # generate input sequence, randomly sample from dataset.n_tokens
-        input_seq = torch.randint(0, self.dataset.n_tokens - 1, (input_len,), device=self.device)
-        
-        # feed LongTensor to LSTM
-        layer_input = torch.unsqueeze(torch.LongTensor(input_seq), 0)
+        input_size = (self.hparams.batch_size, self.hparams.chunk_size)
+        input_seq = torch.randint(0, self.dataset.n_tokens - 1, input_size, device=self.device)
 
-        # Embeddiing
-        layer_input = self.embedding(layer_input)
-        
+        # Forward pass
         predicted = [1]
-        
-
         for i in tqdm(range(predic_len)):
+            output = self.forward(input_seq)
+            output = torch.argmax(output, dim=1)
             
-            initial_hiddens = [self.init_hidden(self.hparams.hidden_size) for _ in range(self.hparams.n_layers - 1)]
-            initial_hiddens.append(self.init_hidden(self.hparams.embedding_size))
-            
-            for idx, LSTM_layer in enumerate(self.layers):
-                layer_output, (h, c) = LSTM_layer(layer_input, initial_hiddens[idx])
-                layer_input = layer_output
-            
-            layer_output = self.decoder(layer_output)
-            layer_output = F.log_softmax(layer_output, dim=1)
-            layer_output = torch.argmax(layer_output, dim=2)
-            layer_input = self.embedding(layer_output)
-
-            output = layer_output.tolist()[0]
-            while 0 in output: output.remove(0)
-            while 1 in output: output.remove(1)
-            while 2 in output: output.remove(2)   
+            output = output.tolist()[0]
+            output = list(filter(lambda x: x != 0 and x != 1 and x != 2, output))
             predicted.extend(output)
-
+            
         predicted.append(3)
         return predicted
 
