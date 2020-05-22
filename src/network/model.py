@@ -240,7 +240,7 @@ class AWD_LSTM(LightningModule):
         # Embeddiing
         layer_input = self.embedding(layer_input)
         
-        predicted = []
+        predicted = [1]
         
 
         for i in tqdm(range(predic_len)):
@@ -255,7 +255,7 @@ class AWD_LSTM(LightningModule):
             output = self.decoder(output)
             output = F.log_softmax(output, dim=1)
             output = torch.argmax(output, dim=2)
-            predicted.append(output[0][-1].item())
+            predicted.extend(output.tolist()[0])
             layer_input = self.embedding(output)
 
         return predicted
