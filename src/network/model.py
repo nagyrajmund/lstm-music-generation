@@ -57,8 +57,6 @@ class AWD_LSTM(LightningModule):
 
     @staticmethod
     def add_model_specific_args(parent_parser):
-        #TODO: boolean arguments don't work as expected, watch out!
-        #      if you pass any value to them, e.g `python train.py use_bias --False` then use_bias will be set to True!
         parser = ArgumentParser(parents=[parent_parser], add_help=False)
         parser.add_argument('--batch_size', type=int, default=128, help='batch size')
         parser.add_argument('--chunk_size', type=int, default=16, help='chunk size')
@@ -69,13 +67,14 @@ class AWD_LSTM(LightningModule):
         parser.add_argument('--hidden_size', type=int, default=400, help='hidden size') #todo def value
         parser.add_argument('--n_layers', type=int, default=1, help='number of LSTM layers')
         parser.add_argument('--lr', type=float, default=0.001, help='learning rate')
-        parser.add_argument('--use_asgd', type=bool, default=False, help='use ASGD')
-        parser.add_argument('--use_bias', type=bool, default=True, help='use bias')
-        parser.add_argument('--use_weight_dropout', type=bool, default=False, help='use weight dropout')
+        parser.add_argument('--use_asgd', action='store_true', default=False, help='use ASGD')
+        parser.add_argument('--without_bias', action='store_true', default=False, help='do not use bias')
+        parser.add_argument('--without_weight_dropout', action='store_true', default=False, help='do not use weight dropout')
         parser.add_argument('--p_dropout', type=float, default=0.5, help='dropout rate for weight dropout')
-        parser.add_argument('--dropouti', type=float, default=None, help='dropout rate in input layer (for variational dropout)')
-        parser.add_argument('--dropouth', type=float, default=None, help='dropout rate in hidden layer (for variational dropout)')
-        parser.add_argument('--dropouto', type=float, default=None, help='dropout rate in output layer (for variational dropout)')
+        parser.add_argument('--use_variational', action='store_true', default=False, help='use variational dropout')
+        parser.add_argument('--dropouti', type=float, default=0.5, help='dropout rate in input layer (for variational dropout)')
+        parser.add_argument('--dropouth', type=float, default=0.5, help='dropout rate in hidden layer (for variational dropout)')
+        parser.add_argument('--dropouto', type=float, default=0.5, help='dropout rate in output layer (for variational dropout)')
         parser.add_argument('--alpha', type=float, default=0, help='coefficient for activation regularization')
         parser.add_argument('--beta', type=float, default=0, help='coefficient for temporal activation regularization')
         parser.add_argument('--num_workers', type=int, default=1, help='number of workers')
@@ -89,8 +88,8 @@ class AWD_LSTM(LightningModule):
         for i in range(self.hparams.n_layers):
             input_size = self.hparams.embedding_size if i == 0 else self.hparams.hidden_size
             output_size = self.hparams.hidden_size if i < (self.hparams.n_layers - 1) else self.hparams.embedding_size
-            layer = nn.LSTM(input_size, output_size, bias=self.hparams.use_bias, batch_first = True)
-            if self.hparams.use_weight_dropout:
+            layer = nn.LSTM(input_size, output_size, bias=(not self.hparams.without_bias), batch_first = True)
+            if not self.hparams.without_weight_dropout: # Use WD
                 layer = WeightDropout(layer, self.hparams.p_dropout)
             
             LSTM_layers.append(layer)
@@ -127,18 +126,20 @@ class AWD_LSTM(LightningModule):
         assert(chunk_size == self.hparams.chunk_size)
         X_in = self.embedding(X_in)
         # -> X_in: (batch_size, chunk_size, embedding_size)
+        X_in = self.vd(X_in, self.hparams.use_variational, self.hparams.dropouti) # Variational dropout
 
         initial_hiddens = self.construct_initial_hiddens()  
         layer_input = X_in
         for layer_idx, LSTM_layer in enumerate(self.layers):
             output, _ = LSTM_layer(layer_input, initial_hiddens[layer_idx])
             
+            # Variational dropout
             if layer_idx == self.hparams.n_layers - 1:
-                layer_input = self.vd(output, self.hparams.dropouth)
+                layer_input = self.vd(output, self.hparams.use_variational, self.hparams.dropouth)
             else:
                 layer_input = output
 
-        output = self.vd(output, self.hparams.dropouto)
+        output = self.vd(output, self.hparams.use_variational, self.hparams.dropouto)
         # output: (batch_size, chunk_size, embedding_size)
         output = self.decoder(output)
         # -> output: (batch_size, chunk_size, n_tokens)
@@ -308,11 +309,11 @@ class VariationalDropout(nn.Module):
     def __init__(self):
         super().__init__()
 
-    def forward(self, x, dropout=0.5):
-        if dropout is None:
+    def forward(self, x, use_variational, dropout_rate):
+        if not use_variational:
             return x
 
-        m = x.data.new(x.shape).bernoulli_(1 - dropout)
-        mask = Variable(m, requires_grad=False) / (1 - dropout)
+        m = x.data.new(x.shape).bernoulli_(1 - dropout_rate)
+        mask = Variable(m, requires_grad=False) / (1 - dropout_rate)
         mask = mask.expand_as(x)
         return mask * x

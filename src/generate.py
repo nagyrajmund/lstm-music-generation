@@ -12,13 +12,13 @@ def build_argument_parser():
     parser.add_argument('--model_file', type=str, default="model", help='model file without extension')
     parser.add_argument('--output_path', type=str, default="../data/generated_outputs/debug_dataset", help='output directory')
     parser.add_argument('--output_name', type=str, default=None, help='file to save output to (without extension)')
-    parser.add_argument('--random_seed', type=int, default="0")
-    parser.add_argument('--input_len', type=int, default="4")
-    parser.add_argument('--predic_len', type=int, default="500")
-    parser.add_argument('--sample_freq', type=int, default="4")
-    parser.add_argument('--note_offset', type=int, default="38")
+    parser.add_argument('--random_seed', type=int, default=0)
+    parser.add_argument('--input_len', type=int, default=4)
+    parser.add_argument('--predic_len', type=int, default=500)
+    parser.add_argument('--sample_freq', type=int, default=4)
+    parser.add_argument('--note_offset', type=int, default=38)
     parser.add_argument('--remove_wait_percent', type=float, default=0.5)
-    parser.add_argument('--chordwise', type=bool, default=False)
+    parser.add_argument('--use_chordwise', action='store_true', default=False, help='use bias')
 
     return parser
 
@@ -66,4 +66,4 @@ if __name__ == "__main__":
     f.close()
     
     # Save as midi
-    write_mid_mp3_wav(notes, args.output_name + ".mid", args.sample_freq, args.note_offset, args.output_path, args.chordwise)
+    write_mid_mp3_wav(notes, args.output_name + ".mid", args.sample_freq, args.note_offset, args.output_path, args.use_chordwise)
