@@ -43,7 +43,7 @@ class AWD_LSTM(LightningModule):
         super().__init__()
         #TODO we have to load the dataset to get the number of tokens
         self.hparams = hparams
-        self.dataset = ClaraDataset(hparams.dataset_path, chunk_size=hparams.chunk_size)
+        self.dataset = ClaraDataset(hparams.dataset_path, chunk_size=hparams.chunk_size, batch_size=hparams.batch_size)
 
         self.embedding = nn.Embedding(self.dataset.n_tokens, hparams.embedding_size)
         self.vd = VariationalDropout()
@@ -60,8 +60,8 @@ class AWD_LSTM(LightningModule):
         #TODO: boolean arguments don't work as expected, watch out!
         #      if you pass any value to them, e.g `python train.py use_bias --False` then use_bias will be set to True!
         parser = ArgumentParser(parents=[parent_parser], add_help=False)
-        parser.add_argument('--batch_size', type=int, default=1, help='batch size')
-        parser.add_argument('--chunk_size', type=int, default=1, help='chunk size')
+        parser.add_argument('--batch_size', type=int, default=128, help='batch size')
+        parser.add_argument('--chunk_size', type=int, default=16, help='chunk size')
         parser.add_argument('--save_interval', type=int, default=100, help='checkpoint saving interval (in epochs)')
         # If stride is not given, it's set to chunk_size to produce non-overlapping windows.
         # parser.add_argument('--stride', type=int, nargs='?') 
@@ -122,40 +122,30 @@ class AWD_LSTM(LightningModule):
 
         Returns: hidden state vector and cell state vector as a tuple
         """
-        X_in = torch.squeeze(X_in, dim=0)
-        # -> X_in: (batch_size, n_chunks, chunk_size)
-        
-        batch_size, n_chunks, chunk_size = X_in.size()
-        assert(chunk_size == self.hparams.chunk_size)
+        batch_size, chunk_size = X_in.size()
         assert(batch_size == self.hparams.batch_size)
-
+        assert(chunk_size == self.hparams.chunk_size)
         X_in = self.embedding(X_in)
-        # -> X_in: (batch_size, n_chunks, chunk_size, embedding_size)
-        X_in = self.vd(X_in, self.hparams.dropouti) # Variational dropout
-        all_outputs = torch.empty(batch_size, n_chunks, chunk_size, self.hparams.embedding_size, device=self.device)
-        # -> all_outputs: (batch_size, n_chunks, chunk_size, embedding_size)
-        for chunk_idx in range(chunk_size):
-            chunk = X_in[:, chunk_idx]
-            # -> chunk: (batch_size, chunk_size, embedding_size)
-            initial_hiddens = self.construct_initial_hiddens()  
-            for layer_idx, LSTM_layer in enumerate(self.layers):
-                chunk, _ = LSTM_layer(chunk, initial_hiddens[layer_idx])
-                # -> chunk: (batch_size, chunk_size, embedding_size)
+        # -> X_in: (batch_size, chunk_size, embedding_size)
 
-                # Variational dropout
-                if layer_idx == self.hparams.n_layers:
-                    chunk = self.vd(chunk, self.hparams.dropouth)
-                else:
-                    chunk = self.vd(chunk, self.hparams.dropouto)
+        initial_hiddens = self.construct_initial_hiddens()  
+        layer_input = X_in
+        for layer_idx, LSTM_layer in enumerate(self.layers):
+            output, _ = LSTM_layer(layer_input, initial_hiddens[layer_idx])
+            
+            if layer_idx == self.n_layers - 1:
+                layer_input = self.vd(output, self.hparams.dropouth)
+            else:
+                layer_input = output
 
-            all_outputs[:, chunk_idx] = chunk
+        output = self.vd(output, self.hparams.dropouto)
+        # output: (batch_size, chunk_size, embedding_size)
+        output = self.decoder(output)
+        # -> output: (batch_size, chunk_size, n_tokens)
 
-        all_outputs = self.decoder(all_outputs)
-        # -> all_outputs: (batch_size, n_chunks, chunk_size, n_tokens)
+        return output.permute(0,2,1)
+        # -> output: (batch_size, n_tokens, chunk_size)
 
-        # permute the outputs for the cross_entropy loss later
-        return all_outputs.permute(0, 3, 1, 2)
-        # -> all_outputs: (batch_size, n_tokens, n_chunks, chunk_size)
     # ------------------------------------------------------------------------------------
 
     def construct_initial_hiddens(self):
@@ -174,15 +164,15 @@ class AWD_LSTM(LightningModule):
     # ------------------------------------------------------------------------------------
 
     def train_dataloader(self):
-        return DataLoader(self.train_dataset, batch_size=self.hparams.batch_size, 
-                          num_workers=self.hparams.num_workers)
+        return DataLoader(self.train_dataset, num_workers=self.hparams.num_workers)
 
     # ------------------------------------------------------------------------------------
 
     def general_step(self, batch, batch_idx):
         x, y = batch
+        x, y = x.squeeze(0), y.squeeze(0)
         output = self.forward(x)
-        y = torch.squeeze(y, dim=0)
+
         loss = F.cross_entropy(output, y)
 
         # Activation regularization # TODO check
@@ -193,6 +183,7 @@ class AWD_LSTM(LightningModule):
         if self.hparams.beta:
             diff = output[:, :, :, 1:] - output[:, :, :, :-1]
             loss += self.hparams.beta * sum(diff[:, :, :, i].pow(2).mean() for i in range(self.hparams.chunk_size - 1))
+
         return loss
 
     # ------------------------------------------------------------------------------------

@@ -3,58 +3,98 @@ import pandas as pd
 import os
 from torch import LongTensor
 from torch.utils.data import Dataset, DataLoader
+from numpy import cumsum, argmax, argmin, searchsorted
 
 class ClaraDataset(Dataset):
-    def __init__(self, dataset_path, chunk_size, dicts = None):
+    def __init__(self, dataset_path, chunk_size, batch_size):
         """
         Parameters:
             dataset_path:  path to the dataset as a string
             dicts:  a list containing note_to_ind (dict) and ind_to_note (list)
         """
-        if dicts is not None:
-            self.note_to_ind = dicts[0]
-            self.ind_to_note = dicts[0].keys()
-        else:
-            built_dicts = self.build_token_dictionaries(self, dataset_path)
-            self.note_to_ind = built_dicts[0]
-            self.ind_to_note = built_dicts[1]
-        
-        self.n_tokens = len(self.note_to_ind)
-        directory = os.fsencode(dataset_path)
-        self.fnames = [os.path.join(directory,fname) for fname in os.listdir(directory) if os.fsdecode(fname).endswith('.txt')]
         self.chunk_size = chunk_size
+        self.batch_size = batch_size
 
-    def __len__(self):
-        return len(self.fnames)
-    
-    def __getitem__(self, idx):
-        # check if slice is given or index
-        if isinstance(idx, slice):
-            start = idx.start
-            stop = idx.stop
-            if stop is None: # if end slice not given, go to end of sequence
-                stop = len(self.labels)
-            if start is None: # if start slice not given, start from beginning of sequence
-                start = 0
-            idxs = range(start, stop)
-        else:
-            idxs = [idx]
-
-        # Pack_sequences expects lists of tensors!
+        directory = os.fsencode(dataset_path)
+        self.fnames = [os.path.join(directory,fname) for fname in os.listdir(directory) 
+                                                     if os.fsdecode(fname).endswith('.txt')]
         
-        sequences = LongTensor([self.split_to_chunks(self.tokenise_as_numbers(self.fnames[i])) for i in idxs])
-
-        # The labels are the same sequences as the inputs, shifted by one to the right
-        x = sequences[:, :-1] # Exclude last input to ensure that x and y are the same size
-        y = sequences[:, 1:]
-        return x, y
-
-    #TODO: should we store the dataset in memory? then we only have to tokenise once
-    #TODO: use better variable names (is token the note (e.g. 'p80') or the number representation)
-    #      idea: use note_to_num and not note_to_ind
+        vocab, inv_vocab, lengths = self.build_vocabulary()        
+        self.note_to_num = vocab
+        self.n_tokens    = len(vocab) 
+        self.num_to_note = inv_vocab
+        self.song_lengths_in_chunks = lengths
+        self.cumsum_of_song_lengths = cumsum(lengths) 
+        self.num_batches = self.cumsum_of_song_lengths[-1] // batch_size
+        self.open_file_ind = None
+        print("Chunk size {}, batch size {}".format(chunk_size, batch_size))
+        print(self.song_lengths_in_chunks)
+        print(self.cumsum_of_song_lengths)
+        print(self.num_batches)
+    def __len__(self):
+        # The last element in the cumsum array contains the total number of chunks
+        return self.num_batches
     
-    @staticmethod
-    def build_token_dictionaries(self, dataset_path):
+    def __getitem__(self, batch_idx):
+        """ Retrive the chunks for indices in range(start, start+self.batch_size).
+        """
+        # TODO: the current solution assumes that the chunks are spread out at most among two songs
+        # this is a reasonable assumption, but it would be cleaner if we could support any number of files
+        first_chunk_global_idx = batch_idx * self.batch_size
+        last_chunk_global_idx  = first_chunk_global_idx + self.batch_size - 1
+        # Find the file index that corresponds to the requested chunks
+        # e.g. if we need chunks for indices between [50:70), then: 
+        #   - the first chunk will be in the first file with cumsum_lengths > 50,
+        #   - the last chunk will be in the first file with cumsum_lengths > 70
+        first_file_ind = searchsorted(self.cumsum_of_song_lengths, first_chunk_global_idx, side='right')
+        last_file_ind  = searchsorted(self.cumsum_of_song_lengths, last_chunk_global_idx,  side='right')
+
+        # Suppose the song has cumsum_lengths = 60 and we want chunks 57:59
+        #   - our first chunk will be at index 60 - 57 = -3 (3rd song from the end)
+        #   - the last chunk will be at index 60-59 = -1
+        # (so the chunk indices within the files are in the [-3:-1] closed interval)
+        first_chunk_local_idx = first_chunk_global_idx if first_file_ind == 0 else first_chunk_global_idx - self.cumsum_of_song_lengths[first_file_ind-1]
+        last_chunk_local_idx  = last_chunk_global_idx  if last_file_ind  == 0 else last_chunk_global_idx  - self.cumsum_of_song_lengths[last_file_ind-1]
+        
+        # If we need a new file, store all chunks in it (so that we can reuse them in later batches)
+        if self.open_file_ind != first_file_ind:
+            self.open_file_ind = first_file_ind
+            self.open_chunks = self.split_file_to_chunks(self.fnames[first_file_ind]) 
+        
+        if first_file_ind == last_file_ind:
+            # All chunks are in the same file (the one that's currently open)
+            chunks = self.open_chunks[first_chunk_local_idx : last_chunk_local_idx+1]
+        else:
+            # The chunks are spread out between two files
+            chunks = self.open_chunks[first_chunk_local_idx:]  # Take all remaining chunks from the first file
+            # Open the second file
+            self.open_file_ind = last_file_ind
+            self.open_chunks = self.split_file_to_chunks(self.fnames[last_file_ind])
+            chunks += self.open_chunks[:last_chunk_local_idx+1]
+      
+        # Chunks is a list of chunks, each chunk being a tensor
+        X = torch.stack(chunks)
+        # -> X: tensor of shape (batch_size, chunk_size)
+        
+        # The labels are simply the following chunks. However, it could happen that 
+        # the last label is in a new file, we have to account for that.
+        last_label_file_ind = searchsorted(self.cumsum_of_song_lengths, last_chunk_global_idx+1,  side='right')
+        if last_label_file_ind != last_file_ind:
+            # Open and store the new file, then extract the first chunk (which will be the last label)
+            self.open_file_ind = last_label_file_ind
+            self.open_chunks = self.split_file_to_chunks(self.fnames[last_label_file_ind])
+            last_label = self.open_chunks[0]
+        else:
+            # Otherwise we can just extract the chunk after the last chunk in X
+            last_label = self.open_chunks[last_chunk_local_idx+1]
+
+        # Again, chunks is a list of chunks, each chunk being a tensor
+        # Last_label is a list containing just the last label (a tensor)
+        Y = torch.stack(chunks[1:] + [last_label])
+        # (The labels are the same sequences as the inputs, shifted by one to the right)
+        return X, Y
+
+    def build_vocabulary(self):
         """
         Parameters:
             dataset_path:  path to the dataset as a string
@@ -63,34 +103,34 @@ class ClaraDataset(Dataset):
             note_to_ind:  dictionary for converting tokens to numbers
             ind_to_note:  list for converting numbers to tokens
         """
-        note_to_ind = {
-            '<PAD>'   : 0, # 0 will be used as padding
-            '<START>' : 1,
-            '<END>'   : 2
-        }
-        #TODO: append and prepend start and eos to the songs
+        note_to_num = {} #TODO: should we have special tokens for START and END?
+        song_lengths = []
 
-        directory = os.fsencode(dataset_path)
-        #TODO: add beginning/end of song tokens
-        for file in os.listdir(directory):
-            with open(os.path.join(directory, file), 'r', ) as f:
-                for token in f.readline().split():
-                    if token not in note_to_ind:
-                        note_to_ind[token] = len(note_to_ind)
+        for file in self.fnames:
+            with open(file, 'r') as f:
+                song_tokens = f.readline().split()
+                song_lengths.append(len(song_tokens))
+                # Store previously unseen tokens in the vocabulary
+                for token in song_tokens:
+                    if token not in note_to_num:
+                        note_to_num[token] = len(note_to_num)
+        
+        num_to_note = list(note_to_num.keys())
+        print(song_lengths)
+        song_lengths_in_chunks = [length // self.chunk_size for length in song_lengths]
 
-        ind_to_note = list(note_to_ind.keys())
+        return note_to_num, num_to_note, song_lengths_in_chunks
 
-        return note_to_ind, ind_to_note
-
-
-    def tokenise_as_numbers(self, fname):
+    def tokenise_file(self, fname):
         with open(fname, 'r') as f:
-            note_list = f.readline().split() #TODO add support for multi-line txts!
+            note_list = f.readline().split()
     
-            return [self.note_to_ind['<START>']] + [self.note_to_ind[note] for note in note_list] + [self.note_to_ind['<END>']]
+            return [self.note_to_num[note] for note in note_list]
 
-    def split_to_chunks(self, data):
-        result = []
-        for i in range(0, len(data) - self.chunk_size, self.chunk_size):
-            result.append(data[i:i + self.chunk_size])
-        return result
+    def split_file_to_chunks(self, fname):
+        tokens = self.tokenise_file(fname)       
+        length = len(tokens)
+
+        chunks = [torch.LongTensor(tokens[i:i+self.chunk_size]) for i in range(0, length - self.chunk_size + 1, self.chunk_size)]
+        return chunks
+        
