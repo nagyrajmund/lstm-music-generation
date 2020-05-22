@@ -133,7 +133,7 @@ class AWD_LSTM(LightningModule):
         for layer_idx, LSTM_layer in enumerate(self.layers):
             output, _ = LSTM_layer(layer_input, initial_hiddens[layer_idx])
             
-            if layer_idx == self.n_layers - 1:
+            if layer_idx == self.hparams.n_layers - 1:
                 layer_input = self.vd(output, self.hparams.dropouth)
             else:
                 layer_input = output
@@ -177,12 +177,12 @@ class AWD_LSTM(LightningModule):
 
         # Activation regularization # TODO check
         if self.hparams.alpha:
-            loss += self.hparams.alpha * sum(output[:, :, :, i].pow(2).mean() for i in range(self.hparams.chunk_size))
+            loss += self.hparams.alpha * sum(output[:, :, i].pow(2).mean() for i in range(self.hparams.chunk_size))
 
         # Temporal activation regularization
         if self.hparams.beta:
-            diff = output[:, :, :, 1:] - output[:, :, :, :-1]
-            loss += self.hparams.beta * sum(diff[:, :, :, i].pow(2).mean() for i in range(self.hparams.chunk_size - 1))
+            diff = output[:, :, 1:] - output[:, :, :-1]
+            loss += self.hparams.beta * sum(diff[:, :, i].pow(2).mean() for i in range(self.hparams.chunk_size - 1))
 
         return loss
 
