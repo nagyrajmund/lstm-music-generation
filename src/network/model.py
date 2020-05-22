@@ -249,15 +249,21 @@ class AWD_LSTM(LightningModule):
             initial_hiddens.append(self.init_hidden(self.hparams.embedding_size))
             
             for idx, LSTM_layer in enumerate(self.layers):
-                output, (h, c) = LSTM_layer(layer_input, initial_hiddens[idx])
-                layer_input = output
+                layer_output, (h, c) = LSTM_layer(layer_input, initial_hiddens[idx])
+                layer_input = layer_output
             
-            output = self.decoder(output)
-            output = F.log_softmax(output, dim=1)
-            output = torch.argmax(output, dim=2)
-            predicted.extend(output.tolist()[0])
-            layer_input = self.embedding(output)
+            layer_output = self.decoder(layer_output)
+            layer_output = F.log_softmax(layer_output, dim=1)
+            layer_output = torch.argmax(layer_output, dim=2)
+            layer_input = self.embedding(layer_output)
 
+            output = layer_output.tolist()[0]
+            while 0 in output: output.remove(0)
+            while 1 in output: output.remove(1)
+            while 2 in output: output.remove(2)   
+            predicted.extend(output)
+
+        predicted.append(3)
         return predicted
 
     # ------------------------------------------------------------------------------------

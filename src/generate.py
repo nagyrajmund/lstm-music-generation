@@ -3,6 +3,8 @@ from pytorch_lightning import Trainer
 from network.model import AWD_LSTM
 from utils.convert import write_mid_mp3_wav
 import torch
+import random
+
 
 def build_argument_parser():
     parser = ArgumentParser()
@@ -12,10 +14,12 @@ def build_argument_parser():
     parser.add_argument('--output_name', type=str, default=None, help='file to save output to (without extension)')
     parser.add_argument('--random_seed', type=int, default="0")
     parser.add_argument('--input_len', type=int, default="4")
-    parser.add_argument('--predic_len', type=int, default="1000")
+    parser.add_argument('--predic_len', type=int, default="100")
     parser.add_argument('--sample_freq', type=int, default="4")
     parser.add_argument('--note_offset', type=int, default="38")
+    parser.add_argument('--remove_wait_percent', type=float, default=0.5)
     parser.add_argument('--chordwise', type=bool, default=False)
+
     return parser
 
 if __name__ == "__main__":
@@ -45,7 +49,15 @@ if __name__ == "__main__":
 
     # Convert tokens to notes
     ind_to_note = model.dataset.ind_to_note
-    notes = [ind_to_note[ind] for ind in generated_ind] 
+    notes = []
+    
+    for ind in generated_ind:
+        if ind_to_note[ind].startswith("wait"):
+            if random.uniform(0, 1) > args.remove_wait_percent:
+                notes.append(ind_to_note[ind])
+        else:
+            notes.append(ind_to_note[ind])
+            
     notes = " ".join(notes)
 
     # Save notes as txt
