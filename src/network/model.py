@@ -46,7 +46,7 @@ class AWD_LSTM(LightningModule):
         self.dataset = ClaraDataset(hparams.dataset_path, chunk_size=hparams.chunk_size)
 
         self.embedding = nn.Embedding(self.dataset.n_tokens, hparams.embedding_size)
-        # TODO self.vd = VariationalDropout()
+        self.vd = VariationalDropout()
         self.layers = self.construct_LSTM_layers()
         self.decoder = nn.Linear(hparams.embedding_size, self.dataset.n_tokens)
 
@@ -131,7 +131,7 @@ class AWD_LSTM(LightningModule):
 
         X_in = self.embedding(X_in)
         # -> X_in: (batch_size, n_chunks, chunk_size, embedding_size)
-        # TODO X_in = self.vd(X_in, self.hparams.dropouti) # Variational dropout
+        X_in = self.vd(X_in, self.hparams.dropouti) # Variational dropout
         all_outputs = torch.empty(batch_size, n_chunks, chunk_size, self.hparams.embedding_size, device=self.device)
         # -> all_outputs: (batch_size, n_chunks, chunk_size, embedding_size)
         for chunk_idx in range(chunk_size):
@@ -142,11 +142,11 @@ class AWD_LSTM(LightningModule):
                 chunk, _ = LSTM_layer(chunk, initial_hiddens[layer_idx])
                 # -> chunk: (batch_size, chunk_size, embedding_size)
 
-                # Variational dropout TODO
-                # if layer_idx == self.hparams.n_layers:
-                #     chunk = self.vd(chunk, self.hparams.dropouth)
-                # else:
-                #     chunk = self.vd(chunk, self.hparams.dropouto)
+                # Variational dropout
+                if layer_idx == self.hparams.n_layers:
+                    chunk = self.vd(chunk, self.hparams.dropouth)
+                else:
+                    chunk = self.vd(chunk, self.hparams.dropouto)
 
             all_outputs[:, chunk_idx] = chunk
 
@@ -312,7 +312,7 @@ class WeightDropout(nn.Module):
         return self.module(input, hiddens)
 
 class VariationalDropout(nn.Module):
-    """ Adapted from original salesforce paper. TODO rewrite logic """
+    """ Adapted from original salesforce paper. TODO rewrite logic? """
 
     def __init__(self):
         super().__init__()
@@ -321,7 +321,7 @@ class VariationalDropout(nn.Module):
         if dropout is None:
             return x
 
-        m = x.data.new(1, x.size(1), x.size(2)).bernoulli_(1 - dropout)
+        m = x.data.new(x.shape).bernoulli_(1 - dropout)
         mask = Variable(m, requires_grad=False) / (1 - dropout)
         mask = mask.expand_as(x)
         return mask * x

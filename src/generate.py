@@ -14,7 +14,7 @@ def build_argument_parser():
     parser.add_argument('--output_name', type=str, default=None, help='file to save output to (without extension)')
     parser.add_argument('--random_seed', type=int, default="0")
     parser.add_argument('--input_len', type=int, default="4")
-    parser.add_argument('--predic_len', type=int, default="100")
+    parser.add_argument('--predic_len', type=int, default="500")
     parser.add_argument('--sample_freq', type=int, default="4")
     parser.add_argument('--note_offset', type=int, default="38")
     parser.add_argument('--remove_wait_percent', type=float, default=0.5)
