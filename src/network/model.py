@@ -298,8 +298,8 @@ class WeightDropout(nn.Module):
         
     def _setweights(self):
         "Apply dropout to the raw weights."
-        raw_w = self.weight_raw #TODO check if ok
-        self.module._parameters['weight_hh_l0'] = F.dropout(raw_w, p=self.hparams_dropout, training=self.training) #TODO check if training is passed correctly
+        raw_w = self.weight_raw
+        self.module._parameters['weight_hh_l0'] = F.dropout(raw_w, p=self.hparams_dropout, training=self.training)
 
     def forward(self, input, hiddens):
         self._setweights()
@@ -319,7 +319,7 @@ class EmbeddingDropout(nn.Module):
     def _setweights(self):
         "Apply dropout to the raw weights."
         raw_w = self.weight_raw
-        self.module._parameters['weight'] = F.dropout(raw_w, p=self.dropoute, training=self.training) #TODO check if training is passed correctly
+        self.module._parameters['weight'] = F.dropout(raw_w, p=self.dropoute, training=self.training)
 
     def forward(self, input):
         self._setweights()
