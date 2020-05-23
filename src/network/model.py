@@ -268,14 +268,14 @@ class AWD_LSTM(LightningModule):
         input_seq = torch.randint(0, self.dataset.n_tokens - 1, input_size, device=self.device)
 
         # Forward pass
-        predicted = [1]
+        predicted = []
         for i in tqdm(range(predic_len)):
             output = self.forward(input_seq, is_training=False)
+            input_seq = output # Input for the next iteration
+            
             output = torch.argmax(output, dim=1)
-
             output = output.tolist()[0]
             predicted.extend(output)
-
         return predicted
 
     # ------------------------------------------------------------------------------------
