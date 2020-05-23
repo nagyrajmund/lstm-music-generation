@@ -101,15 +101,15 @@ class AWD_LSTM(LightningModule):
         
         self.train_dataset = self.dataset #, self.val_dataset, self.test_dataset = random_split(self.dataset, [train_size, val_size, test_size])
 
-    def init_hidden(self, layer_hidden_size):
-        h_init = torch.autograd.Variable(torch.randn(1, self.hparams.batch_size, layer_hidden_size, device=self.device))
-        c_init = torch.autograd.Variable(torch.randn(1, self.hparams.batch_size, layer_hidden_size, device=self.device))
+    def init_hidden(self, layer_hidden_size, batch_size):
+        h_init = torch.autograd.Variable(torch.randn(1, batch_size, layer_hidden_size, device=self.device))
+        c_init = torch.autograd.Variable(torch.randn(1, batch_size, layer_hidden_size, device=self.device))
 
         return (h_init, c_init)
 
     # ---------------------------- Forward pass and learning steps ----------------------------
 
-    def forward(self, X_in):
+    def forward(self, X_in, is_training = True):
         """
         Forward pass.
 
@@ -121,13 +121,16 @@ class AWD_LSTM(LightningModule):
         Returns: hidden state vector and cell state vector as a tuple
         """
         batch_size, chunk_size = X_in.size()
-        assert(batch_size == self.hparams.batch_size)
-        assert(chunk_size == self.hparams.chunk_size)
+        if is_training:
+            assert(batch_size == self.hparams.batch_size)
+            assert(chunk_size == self.hparams.chunk_size)
+        else:
+            assert(batch_size == 1)
         X_in = self.embedding(X_in)
         # -> X_in: (batch_size, chunk_size, embedding_size)
         X_in = self.vd(X_in, self.hparams.use_variational, self.hparams.dropouti) # Variational dropout
 
-        initial_hiddens = self.construct_initial_hiddens()  
+        initial_hiddens = self.construct_initial_hiddens(batch_size)  
         layer_input = X_in
         for layer_idx, LSTM_layer in enumerate(self.layers):
             output, _ = LSTM_layer(layer_input, initial_hiddens[layer_idx])
@@ -148,10 +151,10 @@ class AWD_LSTM(LightningModule):
 
     # ------------------------------------------------------------------------------------
 
-    def construct_initial_hiddens(self):
-        initial_hiddens = [self.init_hidden(self.hparams.hidden_size) for _ in range(self.hparams.n_layers - 1)]
+    def construct_initial_hiddens(self, batch_size):
+        initial_hiddens = [self.init_hidden(self.hparams.hidden_size, batch_size) for _ in range(self.hparams.n_layers - 1)]
         # The last layer's hidden size is the embedding size!
-        initial_hiddens.append(self.init_hidden(self.hparams.embedding_size)) 
+        initial_hiddens.append(self.init_hidden(self.hparams.embedding_size, batch_size)) 
         return initial_hiddens
         
     # ------------------------------------------------------------------------------------    
@@ -243,13 +246,13 @@ class AWD_LSTM(LightningModule):
         torch.manual_seed(random_seed)
 
         # generate input sequence, randomly sample from dataset.n_tokens
-        input_size = (self.hparams.batch_size, self.hparams.chunk_size)
+        input_size = (1, self.hparams.chunk_size)
         input_seq = torch.randint(0, self.dataset.n_tokens - 1, input_size, device=self.device)
 
         # Forward pass
         predicted = [1]
         for i in tqdm(range(predic_len)):
-            output = self.forward(input_seq)
+            output = self.forward(input_seq, is_training=False)
             output = torch.argmax(output, dim=1)
             
             output = output.tolist()[0]
