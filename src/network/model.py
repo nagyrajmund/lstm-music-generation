@@ -16,7 +16,6 @@ from torch.utils.data.sampler import SubsetRandomSampler
 from torch.autograd import Variable
 from tqdm import tqdm
 
-# TODO embedding dropout
 # TODO implement variational length backprop
 
 class AWD_LSTM(LightningModule):
@@ -46,6 +45,8 @@ class AWD_LSTM(LightningModule):
         self.dataset = ClaraDataset(hparams.dataset_path, chunk_size=hparams.chunk_size, batch_size=hparams.batch_size)
 
         self.embedding = nn.Embedding(self.dataset.n_tokens, hparams.embedding_size)
+        if self.hparams.use_embedding_dropout:
+            self.embedding = EmbeddingDropout(self.embedding, self.hparams.dropoute)
         self.layers = self.construct_LSTM_layers()
         self.decoder = nn.Linear(hparams.embedding_size, self.dataset.n_tokens)
 
@@ -74,6 +75,8 @@ class AWD_LSTM(LightningModule):
         parser.add_argument('--dropouti', type=float, default=0.5, help='dropout rate in input layer (for variational dropout)')
         parser.add_argument('--dropouth', type=float, default=0.5, help='dropout rate in hidden layer (for variational dropout)')
         parser.add_argument('--dropouto', type=float, default=0.5, help='dropout rate in output layer (for variational dropout)')
+        parser.add_argument('--use_embedding_dropout', action='store_true', default=False, help='use embedding dropout')
+        parser.add_argument('--dropoute', type=float, default=0.5, help='dropout rate in embedding matrix (for embedding dropout)')
         parser.add_argument('--alpha', type=float, default=0, help='coefficient for activation regularisation')
         parser.add_argument('--beta', type=float, default=0, help='coefficient for temporal activation regularisation')
         parser.add_argument('--num_workers', type=int, default=1, help='number of workers')
@@ -125,6 +128,7 @@ class AWD_LSTM(LightningModule):
             assert(chunk_size == self.hparams.chunk_size)
         else:
             assert(batch_size == 1)
+
         X_in = self.embedding(X_in)
         # -> X_in: (batch_size, chunk_size, embedding_size)
         X_in = self.variational_dropout(X_in, "input")
@@ -280,7 +284,7 @@ class AWD_LSTM(LightningModule):
 
 class WeightDropout(nn.Module):
     """ Adapted from original salesforce paper. """
-    def __init__(self, module: nn.Module, p_dropout: float = 0.5): # Default value of p_dropout is 0.5 in the original paper!
+    def __init__(self, module: nn.LSTM, p_dropout: float = 0.5): # Default value of p_dropout is 0.5 in the original paper!
         print("Using weight dropout!")
         super().__init__()
         self.module = module
@@ -299,3 +303,23 @@ class WeightDropout(nn.Module):
     def forward(self, input, hiddens):
         self._setweights()
         return self.module(input, hiddens)
+
+
+class EmbeddingDropout(nn.Module):
+    def __init__(self, module: nn.Embedding, dropoute: float = 0.5):
+        print("Using embedding dropout!")
+        super().__init__()
+        self.module = module
+        self.dropoute = dropoute
+        
+        w = self.module.weight
+        self.register_parameter('weight_raw', nn.Parameter(w.data))
+        
+    def _setweights(self):
+        "Apply dropout to the raw weights."
+        raw_w = self.weight_raw
+        self.module._parameters['weight'] = F.dropout(raw_w, p=self.dropoute, training=self.training) #TODO check if training is passed correctly
+
+    def forward(self, input):
+        self._setweights()
+        return self.module(input)
