@@ -21,7 +21,7 @@ from tqdm import tqdm
 
 class AWD_LSTM(LightningModule):
     """
-    AWD_LSTM that uses the following optimization strategies: temporal activation regularization, weight dropping,
+    AWD_LSTM that uses the following optimization strategies: temporal activation regularisation, weight dropping,
     variable length backpropagation sequences and ASGD (optional).
     """
 
@@ -46,7 +46,6 @@ class AWD_LSTM(LightningModule):
         self.dataset = ClaraDataset(hparams.dataset_path, chunk_size=hparams.chunk_size, batch_size=hparams.batch_size)
 
         self.embedding = nn.Embedding(self.dataset.n_tokens, hparams.embedding_size)
-        self.vd = VariationalDropout()
         self.layers = self.construct_LSTM_layers()
         self.decoder = nn.Linear(hparams.embedding_size, self.dataset.n_tokens)
 
@@ -75,8 +74,8 @@ class AWD_LSTM(LightningModule):
         parser.add_argument('--dropouti', type=float, default=0.5, help='dropout rate in input layer (for variational dropout)')
         parser.add_argument('--dropouth', type=float, default=0.5, help='dropout rate in hidden layer (for variational dropout)')
         parser.add_argument('--dropouto', type=float, default=0.5, help='dropout rate in output layer (for variational dropout)')
-        parser.add_argument('--alpha', type=float, default=0, help='coefficient for activation regularization')
-        parser.add_argument('--beta', type=float, default=0, help='coefficient for temporal activation regularization')
+        parser.add_argument('--alpha', type=float, default=0, help='coefficient for activation regularisation')
+        parser.add_argument('--beta', type=float, default=0, help='coefficient for temporal activation regularisation')
         parser.add_argument('--num_workers', type=int, default=1, help='number of workers')
         return parser
 
@@ -128,26 +127,39 @@ class AWD_LSTM(LightningModule):
             assert(batch_size == 1)
         X_in = self.embedding(X_in)
         # -> X_in: (batch_size, chunk_size, embedding_size)
-        X_in = self.vd(X_in, self.hparams.use_variational, self.hparams.dropouti) # Variational dropout
-
+        X_in = self.variational_dropout(X_in, "input")
+        
         initial_hiddens = self.construct_initial_hiddens(batch_size)  
         layer_input = X_in
         for layer_idx, LSTM_layer in enumerate(self.layers):
             output, _ = LSTM_layer(layer_input, initial_hiddens[layer_idx])
-            
-            # Variational dropout
-            if layer_idx == self.hparams.n_layers - 1:
-                layer_input = self.vd(output, self.hparams.use_variational, self.hparams.dropouth)
-            else:
-                layer_input = output
+ 
+            if layer_idx < self.hparams.n_layers-1:
+                layer_input = self.variational_dropout(output, "hidden")
 
-        output = self.vd(output, self.hparams.use_variational, self.hparams.dropouto)
+        output = self.variational_dropout(output, "output")
         # output: (batch_size, chunk_size, embedding_size)
         output = self.decoder(output)
         # -> output: (batch_size, chunk_size, n_tokens)
 
         return output.permute(0,2,1)
         # -> output: (batch_size, n_tokens, chunk_size)
+
+    def variational_dropout(self, x, mode):
+        if not self.hparams.use_variational:
+            return x
+        
+        if mode == 'input':
+            p = self.hparams.dropouti # TODO: better command line parameter names
+        elif mode == 'hidden':
+            p = self.hparams.dropouth
+        elif mode == 'output':
+            p = self.hparams.dropouto
+        else:
+            print(f"Unknown dropout type {mode} in variational_dropout!")
+            exit()
+        
+        return F.dropout(x, p)
 
     # ------------------------------------------------------------------------------------
 
@@ -175,14 +187,15 @@ class AWD_LSTM(LightningModule):
         x, y = batch
         x, y = x.squeeze(0), y.squeeze(0)
         output = self.forward(x)
+        # -> output: (batch_size, n_tokens, chunk_size)
 
         loss = F.cross_entropy(output, y)
 
-        # Activation regularization # TODO check
+        # Activation regularisation 
         if self.hparams.alpha:
             loss += self.hparams.alpha * sum(output[:, :, i].pow(2).mean() for i in range(self.hparams.chunk_size))
 
-        # Temporal activation regularization
+        # Temporal activation regularisation
         if self.hparams.beta:
             diff = output[:, :, 1:] - output[:, :, :-1]
             loss += self.hparams.beta * sum(diff[:, :, i].pow(2).mean() for i in range(self.hparams.chunk_size - 1))
@@ -286,18 +299,3 @@ class WeightDropout(nn.Module):
     def forward(self, input, hiddens):
         self._setweights()
         return self.module(input, hiddens)
-
-class VariationalDropout(nn.Module):
-    """ Adapted from original salesforce paper. TODO rewrite logic? """
-
-    def __init__(self):
-        super().__init__()
-
-    def forward(self, x, use_variational, dropout_rate):
-        if not use_variational:
-            return x
-
-        m = x.data.new(x.shape).bernoulli_(1 - dropout_rate)
-        mask = Variable(m, requires_grad=False) / (1 - dropout_rate)
-        mask = mask.expand_as(x)
-        return mask * x
