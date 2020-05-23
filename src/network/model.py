@@ -50,7 +50,7 @@ class AWD_LSTM(LightningModule):
         self.layers = self.construct_LSTM_layers()
         self.decoder = nn.Linear(hparams.embedding_size, self.dataset.n_tokens)
 
-        if self.hparams.gpus == 0:
+        if not torch.cuda.is_available():
             self.device = "cpu"
         else:
             self.device = "cuda:0"
@@ -271,9 +271,9 @@ class AWD_LSTM(LightningModule):
         predicted = []
         for i in tqdm(range(predic_len)):
             output = self.forward(input_seq, is_training=False)
+            output = torch.argmax(output, dim=1)
             input_seq = output # Input for the next iteration
             
-            output = torch.argmax(output, dim=1)
             output = output.tolist()[0]
             predicted.extend(output)
         return predicted
