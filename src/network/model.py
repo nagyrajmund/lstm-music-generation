@@ -49,7 +49,7 @@ class AWD_LSTM(LightningModule):
         self.layers = self.construct_LSTM_layers()
         self.decoder = nn.Linear(hparams.embedding_size, self.dataset.n_tokens)
 
-        if not torch.cuda.is_available():
+        if self.hparams.gpus == 0:
             self.device = "cpu"
 
     # ---------------------------- Model parameters ----------------------------
