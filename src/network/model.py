@@ -52,7 +52,8 @@ class AWD_LSTM(LightningModule):
 
         if self.hparams.gpus == 0:
             self.device = "cpu"
-
+        else:
+            self.device = "cuda:0"
     # ---------------------------- Model parameters ----------------------------
 
     @staticmethod
