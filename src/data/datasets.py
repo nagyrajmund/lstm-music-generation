@@ -27,10 +27,6 @@ class ClaraDataset(Dataset):
         self.cumsum_of_song_lengths = cumsum(lengths) 
         self.num_batches = self.cumsum_of_song_lengths[-1] // batch_size
         self.open_file_ind = None
-        print("Chunk size {}, batch size {}".format(chunk_size, batch_size))
-        print(self.song_lengths_in_chunks)
-        print(self.cumsum_of_song_lengths)
-        print(self.num_batches)
     def __len__(self):
         # The last element in the cumsum array contains the total number of chunks
         return self.num_batches
@@ -116,7 +112,6 @@ class ClaraDataset(Dataset):
                         note_to_num[token] = len(note_to_num)
         
         num_to_note = list(note_to_num.keys())
-        print(song_lengths)
         song_lengths_in_chunks = [length // self.chunk_size for length in song_lengths]
 
         return note_to_num, num_to_note, song_lengths_in_chunks
