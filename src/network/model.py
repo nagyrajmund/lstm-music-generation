@@ -239,7 +239,7 @@ class AWD_LSTM(LightningModule):
 
     # ---------------------------- Generate new music ----------------------------
 
-    def generate(self, random_seed=0, input_len=10, predic_len=10):
+    def generate(self, random_seed, input_len, predic_len):
         '''
         Parameters: 
             random_seed : seed to generate random input sequence
@@ -260,8 +260,8 @@ class AWD_LSTM(LightningModule):
             return prediction [e, f, g, h, ..., ] of predic_len
 
         '''
-        # set random seed
-        torch.manual_seed(random_seed)
+        if random_seed is not None:
+            torch.manual_seed(random_seed)
 
         # generate input sequence, randomly sample from dataset.n_tokens
         input_size = (1, self.hparams.chunk_size)
@@ -272,12 +272,10 @@ class AWD_LSTM(LightningModule):
         for i in tqdm(range(predic_len)):
             output = self.forward(input_seq, is_training=False)
             output = torch.argmax(output, dim=1)
-            
+
             output = output.tolist()[0]
-            output = list(filter(lambda x: x != 0 and x != 1 and x != 2, output))
             predicted.extend(output)
-            
-        predicted.append(3)
+
         return predicted
 
     # ------------------------------------------------------------------------------------
