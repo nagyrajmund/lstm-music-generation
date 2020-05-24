@@ -19,10 +19,12 @@ class ClaraDataset(Dataset):
         self.fnames = [os.path.join(directory,fname) for fname in os.listdir(directory) 
                                                      if os.fsdecode(fname).endswith('.txt')]
         
-        vocab, inv_vocab, lengths = self.build_vocabulary()        
+        vocab, inv_vocab, lengths, token_count = self.build_vocabulary()        
         self.note_to_num = vocab
-        self.n_tokens    = len(vocab) 
+        self.n_tokens    = len(vocab)
         self.num_to_note = inv_vocab
+        self.token_count = token_count
+        print({k: v for k, v in sorted(token_count.items(), key=lambda item: item[1])})
         self.song_lengths_in_chunks = lengths
         self.cumsum_of_song_lengths = cumsum(lengths) 
         self.num_batches = self.cumsum_of_song_lengths[-1] // batch_size
@@ -100,6 +102,7 @@ class ClaraDataset(Dataset):
             num_to_note:  list for converting numbers to tokens
         """
         note_to_num = {} #TODO: should we have special tokens for START and END?
+        token_count = {}
         song_lengths = []
 
         for file in self.fnames:
@@ -110,11 +113,16 @@ class ClaraDataset(Dataset):
                 for token in song_tokens:
                     if token not in note_to_num:
                         note_to_num[token] = len(note_to_num)
+
+                    if token in token_count:
+                        token_count[token] += 1
+                    else:
+                        token_count[token] = 1
         
         num_to_note = list(note_to_num.keys())
         song_lengths_in_chunks = [length // self.chunk_size for length in song_lengths]
 
-        return note_to_num, num_to_note, song_lengths_in_chunks
+        return note_to_num, num_to_note, song_lengths_in_chunks, token_count
 
     def tokenise_file(self, fname):
         with open(fname, 'r') as f:

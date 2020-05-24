@@ -195,7 +195,16 @@ class AWD_LSTM(LightningModule):
         output = self.forward(x)
         # -> output: (batch_size, n_tokens, chunk_size)
 
-        loss = F.cross_entropy(output, y)
+        # Wait penalisation
+        if self.hparams.use_wait_penal:
+            sum_of_waits = 0
+            prediction = torch.argmax(output, dim=1).detach() # (batch_size, 1, chunk_size)
+
+            freq = torch.Tensor(list(self.dataset.token_count.values()))
+            weights = self.dataset.n_tokens / freq
+            loss = F.cross_entropy(output, y, weight=weights)
+        else:
+            loss = F.cross_entropy(output, y)
 
         # Activation regularisation 
         if self.hparams.alpha:
@@ -205,16 +214,6 @@ class AWD_LSTM(LightningModule):
         if self.hparams.beta:
             diff = output[:, :, 1:] - output[:, :, :-1]
             loss += self.hparams.beta * sum(diff[:, :, i].pow(2).mean() for i in range(self.hparams.chunk_size - 1))
-
-        # Wait penalisation
-        if self.hparams.use_wait_penal:
-            sum_of_waits = 0
-            prediction = torch.argmax(output, dim=1).detach() # (batch_size, 1, chunk_size)
-            unique, counts = np.unique(prediction.cpu(), return_counts=True)
-            for u, c in zip(unique, counts):
-                if self.dataset.num_to_note[u].startswith("wait"):
-                    sum_of_waits += c
-            loss += sum_of_waits
 
         return loss
 
