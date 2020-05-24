@@ -2,7 +2,8 @@ import torch
 import torch.nn as nn
 import torch.nn.functional as F
 import numpy as np
-from torch import Tensor
+import random
+from torch import Tensor, LongTensor
 from torch.utils.data import DataLoader
 from torch.utils.data import random_split
 from torch.nn.utils import rnn
@@ -81,6 +82,8 @@ class AWD_LSTM(LightningModule):
         parser.add_argument('--alpha', type=float, default=0, help='coefficient for activation regularisation')
         parser.add_argument('--beta', type=float, default=0, help='coefficient for temporal activation regularisation')
         parser.add_argument('--use_wait_penal', action='store_true', default=False, help='use weight penalisation')
+        parser.add_argument('--topk', type=float, default=1, help='sample from the top k predictions')
+        parser.add_argument('--sampling_freq', type=float, default=0.5, help='frequency of sampling from the top k predictions')
         parser.add_argument('--num_workers', type=int, default=1, help='number of workers')
         return parser
 
@@ -198,7 +201,7 @@ class AWD_LSTM(LightningModule):
         # Wait penalisation
         if self.hparams.use_wait_penal:
             sum_of_waits = 0
-            prediction = torch.argmax(output, dim=1).detach() # (batch_size, 1, chunk_size)
+            prediction = torch.argmax(output, dim=1).detach() # (batch_size, 1, chunk_size) # TODO change to top k?
 
             freq = torch.Tensor(list(self.dataset.token_count.values())).to(self.device)
             weights = self.dataset.n_tokens / freq
@@ -280,9 +283,21 @@ class AWD_LSTM(LightningModule):
         # Forward pass
         predicted = []
         for i in tqdm(range(predic_len)):
+            if random.random() < self.hparams.sampling_freq:
+                k = self.hparams.topk
+            else:
+                k = 1
+
             output = self.forward(input_seq, is_training=False) # (1, n_tokens, chunk_size)
-            output = torch.argmax(output, dim=1) # (1, chunk_size)
-            input_seq = output # Input for the next iteration
+            values, indices = torch.topk(output, k=k, dim=1) # (1, k, chunk_size)
+
+            output = torch.empty((1, self.hparams.chunk_size), dtype=int, device=self.device)
+
+            for j in range(self.hparams.chunk_size):
+                ind = torch.multinomial(values[0, :, j], 1)
+                output[0, j] = indices[0, ind, j]
+
+            input_seq = LongTensor(output) # Input for the next iteration
             
             output = output.tolist()[0]
             predicted.extend(output)
