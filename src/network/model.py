@@ -82,8 +82,8 @@ class AWD_LSTM(LightningModule):
         parser.add_argument('--alpha', type=float, default=0, help='coefficient for activation regularisation')
         parser.add_argument('--beta', type=float, default=0, help='coefficient for temporal activation regularisation')
         parser.add_argument('--use_wait_penal', action='store_true', default=False, help='use weight penalisation')
-        parser.add_argument('--topk', type=float, default=1, help='sample from the top k predictions')
-        parser.add_argument('--sampling_freq', type=float, default=0.5, help='frequency of sampling from the top k predictions')
+        parser.add_argument('--topk', type=int, default=1, help='sample from the top k predictions')
+        parser.add_argument('--sampling_freq', type=int, default=0.5, help='frequency of sampling from the top k predictions')
         parser.add_argument('--num_workers', type=int, default=1, help='number of workers')
         return parser
 
