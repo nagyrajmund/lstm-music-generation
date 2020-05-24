@@ -37,14 +37,14 @@ if __name__ == "__main__":
         model_data = torch.load(model_full_path)
         state_dict, hparams = model_data['state_dict'], model_data['hparams']
         model = AWD_LSTM(hparams).cuda()
-        model.load_state_dict(state_dict)
-        model.eval()
+
     else:
         model_data = torch.load(model_full_path, map_location=torch.device('cpu'))
         state_dict, hparams = model_data['state_dict'], model_data['hparams']
         model = AWD_LSTM(hparams)
-        model.load_state_dict(state_dict)
-        model.eval()
+
+    model.load_state_dict(state_dict)
+    model.eval()
 
 
     # Generate
