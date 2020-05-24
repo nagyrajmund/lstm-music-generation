@@ -1,10 +1,7 @@
 from argparse import ArgumentParser
 from pytorch_lightning import Trainer
-from pytorch_lightning.callbacks import ModelCheckpoint
 from network.model import AWD_LSTM
-from utils.convert import write_mid_mp3_wav
 import torch
-import pickle
 
 def build_argument_parser():
     parser = ArgumentParser()
