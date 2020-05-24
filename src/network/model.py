@@ -66,8 +66,8 @@ class AWD_LSTM(LightningModule):
         parser.add_argument('--save_interval', type=int, default=100, help='checkpoint saving interval (in epochs)')
         # If stride is not given, it's set to chunk_size to produce non-overlapping windows.
         # parser.add_argument('--stride', type=int, nargs='?') 
-        parser.add_argument('--embedding_size', type=int, default=600, help='embedding size') #todo def value
-        parser.add_argument('--hidden_size', type=int, default=400, help='hidden size') #todo def value
+        parser.add_argument('--embedding_size', type=int, default=600, help='embedding size')
+        parser.add_argument('--hidden_size', type=int, default=400, help='hidden size')
         parser.add_argument('--n_layers', type=int, default=1, help='number of LSTM layers')
         parser.add_argument('--lr', type=float, default=0.001, help='learning rate')
         parser.add_argument('--use_asgd', action='store_true', default=False, help='use ASGD')
@@ -284,7 +284,7 @@ class AWD_LSTM(LightningModule):
         predicted = []
         for i in tqdm(range(predic_len)):
             if random.random() < self.hparams.sampling_freq:
-                k = self.hparams.topk
+                k = int(self.hparams.topk) # TODO remove
             else:
                 k = 1
 
@@ -323,6 +323,7 @@ class WeightDropout(nn.Module):
         "Apply dropout to the raw weights."
         raw_w = self.weight_raw
         self.module._parameters['weight_hh_l0'] = F.dropout(raw_w, p=self.hparams_dropout, training=self.training)
+        self.module._parameters['weight_hh_l0'].retain_grad()
 
     def forward(self, input, hiddens):
         self._setweights()
@@ -343,6 +344,7 @@ class EmbeddingDropout(nn.Module):
         "Apply dropout to the raw weights."
         raw_w = self.weight_raw
         self.module._parameters['weight'] = F.dropout(raw_w, p=self.dropoute, training=self.training)
+        self.module._parameters['weight'].retain_grad()
 
     def forward(self, input):
         self._setweights()

@@ -16,5 +16,5 @@ if __name__ == "__main__":
     # Parse command-line args
     hparams = build_argument_parser().parse_args()
     model = AWD_LSTM(hparams)
-    trainer = Trainer.from_argparse_args(hparams)
+    trainer = Trainer.from_argparse_args(hparams, gradient_clip_val=0.5)
     trainer.fit(model)

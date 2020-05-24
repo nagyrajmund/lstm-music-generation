@@ -46,5 +46,5 @@ if __name__ == "__main__":
     model.hparams.model_file = args.new_model_file
 
     # Resume training
-    trainer = Trainer.from_argparse_args(model.hparams)
+    trainer = Trainer.from_argparse_args(model.hparams, gradient_clip_val=0.5)
     trainer.fit(model)

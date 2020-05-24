@@ -1,9 +1,7 @@
 from argparse import ArgumentParser
-from pytorch_lightning import Trainer
 from network.model import AWD_LSTM
 from utils.convert import write_mid_mp3_wav
 import torch
-import random
 
 
 def build_argument_parser():
