@@ -210,7 +210,7 @@ class AWD_LSTM(LightningModule):
         if self.hparams.use_weight_penal:
             sum_of_waits = 0
             prediction = torch.argmax(output, dim=1).detach() # (batch_size, 1, chunk_size)
-            unique, counts = np.unique(prediction, return_counts=True)
+            unique, counts = np.unique(prediction.cpu(), return_counts=True)
             for u, c in zip(unique, counts):
                 if self.dataset.num_to_note[u].startswith("wait"):
                     sum_of_waits += c
