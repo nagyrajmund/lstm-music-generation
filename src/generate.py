@@ -35,13 +35,17 @@ if __name__ == "__main__":
     # Load model
     if torch.cuda.is_available():
         model_data = torch.load(model_full_path)
+        state_dict, hparams = model_data['state_dict'], model_data['hparams']
+        model = AWD_LSTM(hparams).cuda()
+        model.load_state_dict(state_dict)
+        model.eval()
     else:
         model_data = torch.load(model_full_path, map_location=torch.device('cpu'))
+        state_dict, hparams = model_data['state_dict'], model_data['hparams']
+        model = AWD_LSTM(hparams)
+        model.load_state_dict(state_dict)
+        model.eval()
 
-    state_dict, hparams = model_data['state_dict'], model_data['hparams']
-    model = AWD_LSTM(hparams)
-    model.load_state_dict(state_dict)
-    model.eval()
 
     # Generate
     generated_nums = model.generate(args.random_seed, args.input_len, args.predic_len)
