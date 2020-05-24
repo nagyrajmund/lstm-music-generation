@@ -80,7 +80,7 @@ class AWD_LSTM(LightningModule):
         parser.add_argument('--dropoute', type=float, default=0.5, help='dropout rate in embedding matrix (for embedding dropout)')
         parser.add_argument('--alpha', type=float, default=0, help='coefficient for activation regularisation')
         parser.add_argument('--beta', type=float, default=0, help='coefficient for temporal activation regularisation')
-        parser.add_argument('--use_weight_penal', action='store_true', default=False, help='use weight penalisation')
+        parser.add_argument('--use_wait_penal', action='store_true', default=False, help='use weight penalisation')
         parser.add_argument('--num_workers', type=int, default=1, help='number of workers')
         return parser
 
@@ -207,7 +207,7 @@ class AWD_LSTM(LightningModule):
             loss += self.hparams.beta * sum(diff[:, :, i].pow(2).mean() for i in range(self.hparams.chunk_size - 1))
 
         # Wait penalisation
-        if self.hparams.use_weight_penal:
+        if self.hparams.use_wait_penal:
             sum_of_waits = 0
             prediction = torch.argmax(output, dim=1).detach() # (batch_size, 1, chunk_size)
             unique, counts = np.unique(prediction.cpu(), return_counts=True)
