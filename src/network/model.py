@@ -3,7 +3,7 @@ import torch.nn as nn
 import torch.nn.functional as F
 import numpy as np
 import random
-from torch import Tensor, LongTensor
+from torch import Tensor
 from torch.utils.data import DataLoader
 from torch.utils.data import random_split
 from torch.nn.utils import rnn
@@ -51,10 +51,11 @@ class AWD_LSTM(LightningModule):
         self.layers = self.construct_LSTM_layers()
         self.decoder = nn.Linear(hparams.embedding_size, self.dataset.n_tokens)
 
-        if not torch.cuda.is_available():
-            self.device = "cpu"
-        else:
-            self.device = "cuda:0"
+        if not hasattr(self, 'device'):
+            if not torch.cuda.is_available():
+                self.device = "cpu"
+            else:
+                self.device = "cuda:0"
     # ---------------------------- Model parameters ----------------------------
 
     @staticmethod
@@ -297,7 +298,7 @@ class AWD_LSTM(LightningModule):
                 ind = torch.multinomial(values[0, :, j], 1)
                 output[0, j] = indices[0, ind, j]
 
-            input_seq = LongTensor(output) # Input for the next iteration
+            input_seq = output.clone().detach() # Input for the next iteration
             
             output = output.tolist()[0]
             predicted.extend(output)
