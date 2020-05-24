@@ -80,6 +80,7 @@ class AWD_LSTM(LightningModule):
         parser.add_argument('--dropoute', type=float, default=0.5, help='dropout rate in embedding matrix (for embedding dropout)')
         parser.add_argument('--alpha', type=float, default=0, help='coefficient for activation regularisation')
         parser.add_argument('--beta', type=float, default=0, help='coefficient for temporal activation regularisation')
+        parser.add_argument('--use_weight_penal', action='store_true', default=False, help='use weight penalisation')
         parser.add_argument('--num_workers', type=int, default=1, help='number of workers')
         return parser
 
@@ -205,6 +206,16 @@ class AWD_LSTM(LightningModule):
             diff = output[:, :, 1:] - output[:, :, :-1]
             loss += self.hparams.beta * sum(diff[:, :, i].pow(2).mean() for i in range(self.hparams.chunk_size - 1))
 
+        # Wait penalisation
+        if self.hparams.use_weight_penal:
+            sum_of_waits = 0
+            prediction = torch.argmax(output, dim=1).detach() # (batch_size, 1, chunk_size)
+            unique, counts = np.unique(prediction, return_counts=True)
+            for u, c in zip(unique, counts):
+                if self.dataset.num_to_note[u].startswith("wait"):
+                    sum_of_waits += c
+            loss += sum_of_waits
+
         return loss
 
     # ------------------------------------------------------------------------------------
@@ -270,8 +281,8 @@ class AWD_LSTM(LightningModule):
         # Forward pass
         predicted = []
         for i in tqdm(range(predic_len)):
-            output = self.forward(input_seq, is_training=False)
-            output = torch.argmax(output, dim=1)
+            output = self.forward(input_seq, is_training=False) # (1, n_tokens, chunk_size)
+            output = torch.argmax(output, dim=1) # (1, chunk_size)
             input_seq = output # Input for the next iteration
             
             output = output.tolist()[0]
