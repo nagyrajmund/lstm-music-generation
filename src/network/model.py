@@ -200,7 +200,7 @@ class AWD_LSTM(LightningModule):
             sum_of_waits = 0
             prediction = torch.argmax(output, dim=1).detach() # (batch_size, 1, chunk_size)
 
-            freq = torch.Tensor(list(self.dataset.token_count.values()))
+            freq = torch.Tensor(list(self.dataset.token_count.values())).to(self.device)
             weights = self.dataset.n_tokens / freq
             loss = F.cross_entropy(output, y, weight=weights)
         else:
