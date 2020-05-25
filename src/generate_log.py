@@ -17,4 +17,4 @@ file_names = ["logs/bach_38_4/run-small_bach_chunk16-tag-loss.csv",
 labels = ["Chunk size 16", "Chunk size 4"]
 title = "Training loss for two data points without loss scaling"
 scales = [4, 1]
-plot_multiple_diagrams(file_names, labels, title, "img/small_bach_38_4.png", scales=scales)
+plot_multiple_diagrams(file_names, labels, title, "img/small_bach_38_4_without_scaling.png", scales=scales)
