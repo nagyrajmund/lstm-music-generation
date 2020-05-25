@@ -257,6 +257,9 @@ class AWD_LSTM(LightningModule):
         # Save state dict with parameters at the end of the training
         model_data = {'state_dict': self.state_dict(), 'hparams': self.hparams}
         torch.save(model_data, self.hparams.model_path + "/" + self.hparams.model_file + ".pth")
+        
+        # Generate
+        generate_sound(self, self.hparams, use_tqdm=False)
 
     # ---------------------------- Generate new music ----------------------------
 
