@@ -18,7 +18,9 @@ def plot_diagram(x, y, label, title="", show=False, file_name=None, scale=1):
     plt.xlabel("steps", horizontalalignment='right', x=1.0)
     plt.title(title)
     plt.legend()
+    plt.tight_layout(pad=0.1)
     fig = plt.gcf()
+    fig.set_size_inches(6, 4)
 
     if show:
         plt.show()
