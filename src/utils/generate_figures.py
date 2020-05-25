@@ -11,9 +11,9 @@ def moving_average(y, N=1):
     y_smooth = np.convolve(y_padded, np.ones((N,)) / N, mode='valid')
     return y_smooth
 
-def plot_diagram(x, y, label, title="", show=False, file_name=None, scale=1):
+def plot_diagram(x, y, label, title="", show=False, file_name=None, scale=1, N=1):
     x = [scale * elem for elem in x]
-    plt.plot(x, moving_average(y), label=label)
+    plt.plot(x, moving_average(y, N), label=label)
     matplotlib.rcParams.update({'font.size': 72})
     plt.xlabel("steps", horizontalalignment='right', x=1.0)
     plt.title(title)
@@ -39,7 +39,7 @@ def open_csv(file_name, header=True):
             y.append(float(row[2]))
     return x, y
 
-def plot_multiple_diagrams(file_names, labels, title, out_img, scales=None):
+def plot_multiple_diagrams(file_names, labels, title, out_img, scales=None, N=1):
     nr_of_files = len(file_names)
     assert nr_of_files == len(labels)
     if scales is not None:
@@ -50,6 +50,6 @@ def plot_multiple_diagrams(file_names, labels, title, out_img, scales=None):
     for i, (file_name, label, scale) in enumerate(zip(file_names, labels, scales)):
         x, y = open_csv(file_name)
         if i == nr_of_files - 1:
-            plot_diagram(x, y, label, title, show=True, file_name=out_img, scale=scale)
+            plot_diagram(x, y, label, title, show=True, file_name=out_img, scale=scale, N=N)
         else:
-            plot_diagram(x, y, label, title, scale=scale)
+            plot_diagram(x, y, label, title, scale=scale, N=N)
