@@ -2,6 +2,7 @@ import torch
 import torch.nn as nn
 import torch.nn.functional as F
 import numpy as np
+import copy
 import random
 from utils.generate_helper import generate_sound
 from torch import Tensor
@@ -235,12 +236,15 @@ class AWD_LSTM(LightningModule):
         # Save state dict with parameters (checkpoint)
         if (self.trainer.current_epoch != 0) and (self.trainer.current_epoch % self.hparams.save_interval == 0):
             model_data = {'state_dict': self.state_dict(), 'hparams': self.hparams}
+            model_name = self.hparams.model_file + "_" + str(self.trainer.current_epoch) + "epochs"
             model_full_path = \
-                self.hparams.model_path + "/" + self.hparams.model_file + "_" + str(self.trainer.current_epoch) + "epochs.pth"
+                self.hparams.model_path + "/" + model_name + ".pth"
             torch.save(model_data, model_full_path)
 
             # Generate
-            generate_sound(self, self.hparams, use_tqdm=False)
+            args = copy.deepcopy(self.hparams)
+            args.model_file = model_name
+            generate_sound(self, args, use_tqdm=False)
 
         # Average loss
         avg_loss = torch.stack([x['loss'] for x in outputs]).mean()
