@@ -3,6 +3,7 @@ import torch.nn as nn
 import torch.nn.functional as F
 import numpy as np
 import random
+from utils.generate_helper import generate_sound
 from torch import Tensor
 from torch.utils.data import DataLoader
 from torch.utils.data import random_split
@@ -231,12 +232,15 @@ class AWD_LSTM(LightningModule):
     # ------------------------------------------------------------------------------------
 
     def training_epoch_end(self, outputs):
+        # Save state dict with parameters (checkpoint)
         if (self.trainer.current_epoch != 0) and (self.trainer.current_epoch % self.hparams.save_interval == 0):
-            # Save state dict with parameters (checkpoint)
             model_data = {'state_dict': self.state_dict(), 'hparams': self.hparams}
             model_full_path = \
                 self.hparams.model_path + "/" + self.hparams.model_file + "_" + str(self.trainer.current_epoch) + "epochs.pth"
             torch.save(model_data, model_full_path)
+
+            # Generate
+            generate_sound(self, self.hparams, use_tqdm=False)
 
         # Average loss
         avg_loss = torch.stack([x['loss'] for x in outputs]).mean()
@@ -252,7 +256,7 @@ class AWD_LSTM(LightningModule):
 
     # ---------------------------- Generate new music ----------------------------
 
-    def generate(self, random_seed, input_len, predic_len):
+    def generate(self, random_seed, input_len, predic_len, use_tqdm=True):
         '''
         Parameters: 
             random_seed : seed to generate random input sequence
@@ -282,7 +286,13 @@ class AWD_LSTM(LightningModule):
 
         # Forward pass
         predicted = []
-        for i in tqdm(range(predic_len)):
+
+        if use_tqdm:
+            iter_range = tqdm(range(predic_len))
+        else:
+            iter_range = (range(predic_len))
+
+        for i in iter_range:
             if random.random() < self.hparams.sampling_freq:
                 k = int(self.hparams.topk) # TODO remove
             else:
