@@ -4,6 +4,7 @@ import os
 from torch import LongTensor
 from torch.utils.data import Dataset, DataLoader
 from numpy import cumsum, argmax, argmin, searchsorted
+from sklearn.utils import shuffle
 
 class ClaraDataset(Dataset):
     def __init__(self, dataset_path, chunk_size, batch_size):
@@ -26,9 +27,10 @@ class ClaraDataset(Dataset):
         self.token_count = token_count
         print({k: v for k, v in sorted(token_count.items(), key=lambda item: item[1])})
         self.song_lengths_in_chunks = lengths
-        self.cumsum_of_song_lengths = cumsum(lengths) 
+        self.cumsum_of_song_lengths = cumsum(lengths)
         self.num_batches = self.cumsum_of_song_lengths[-1] // batch_size
         self.open_file_ind = None
+
     def __len__(self):
         # The last element in the cumsum array contains the total number of chunks
         return self.num_batches
@@ -90,6 +92,13 @@ class ClaraDataset(Dataset):
         # Last_label is a list containing just the last label (a tensor)
         Y = torch.stack(chunks[1:] + [last_label])
         # (The labels are the same sequences as the inputs, shifted by one to the right)
+
+        # Shuffle if last epoch
+        if batch_idx == self.__len__() - 1:
+            self.fnames, self.song_lengths_in_chunks = \
+                shuffle(self.fnames, self.song_lengths_in_chunks)
+            self.cumsum_of_song_lengths = cumsum(self.song_lengths_in_chunks)
+
         return X, Y
 
     def build_vocabulary(self):
