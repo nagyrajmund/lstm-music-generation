@@ -25,7 +25,7 @@ class ClaraDataset(Dataset):
         self.n_tokens    = len(vocab)
         self.num_to_note = inv_vocab
         self.token_count = token_count
-        print({k: v for k, v in sorted(token_count.items(), key=lambda item: item[1])})
+        self.token_distribution = {k: v for k, v in sorted(token_count.items(), reverse=True, key=lambda item: item[1])}
         self.song_lengths_in_chunks = lengths
         self.cumsum_of_song_lengths = cumsum(lengths)
         self.num_batches = self.cumsum_of_song_lengths[-1] // batch_size
@@ -110,7 +110,7 @@ class ClaraDataset(Dataset):
             note_to_num:  dictionary for converting tokens to numbers
             num_to_note:  list for converting numbers to tokens
         """
-        note_to_num = {} #TODO: should we have special tokens for START and END?
+        note_to_num = {}
         token_count = {}
         song_lengths = []
 

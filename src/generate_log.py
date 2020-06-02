@@ -1,6 +1,12 @@
-from utils.generate_figures import plot_multiple_diagrams, moving_average
+from utils.generate_figures import plot_multiple_diagrams, moving_average, plot_distribution
 
-# TODO move files from source to root dir
+################
+# Distribution #
+################
+dictionary = {'wait1': 769227, 'wait2': 144122, 'p26': 50207, 'p27': 50083, 'p25': 50068, 'p24': 49460,
+    'p28': 49458, 'p23': 47730, 'p29': 47194, 'p22': 46603, 'p30': 46256, 'endp26': 44277, 'endp27': 44221,
+        'endp25': 43991, 'p21': 43772}
+plot_distribution(dictionary)
 
 ##############
 # Bach small #

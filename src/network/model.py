@@ -301,7 +301,7 @@ class AWD_LSTM(LightningModule):
 
         for i in iter_range:
             if random.random() < self.hparams.sampling_freq:
-                k = int(self.hparams.topk) # TODO remove
+                k = self.hparams.topk
             else:
                 k = 1
 

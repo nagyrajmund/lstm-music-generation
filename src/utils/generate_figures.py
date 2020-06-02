@@ -55,3 +55,12 @@ def plot_multiple_diagrams(file_names, labels, title, out_img, scales=None, N=1,
             plot_diagram(x, y, label, title, show=True, file_name=out_img, scale=scale, N=N, ylimits=ylimits)
         else:
             plot_diagram(x, y, label, title, scale=scale, N=N, ylimits=ylimits)
+
+def plot_distribution(dictionary):
+    fig, ax = plt.subplots()
+    keys = list(dictionary.keys())
+    maxim = dictionary[keys[0]]
+    ax.bar(keys, dictionary.values())
+    for i, v in enumerate(dictionary.values()):
+        ax.text(i - 0.35, v + maxim/100, v)
+    plt.show()
